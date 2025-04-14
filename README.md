@@ -116,5 +116,5 @@ Dennis Lee
 
 
 ---
-
+https://sergioprado.blog/reverse-engineering-router-firmware-with-binwalk/
 

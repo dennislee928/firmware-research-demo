@@ -1,0 +1,1 @@
+Detect_Telnetd /Users/lipeichen/Documents/twister5.com.tw/firmware-research-demo/firmware.bin

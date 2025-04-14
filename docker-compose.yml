@@ -1,0 +1,24 @@
+version: "3"
+
+services:
+  firmware-analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: firmware-analyzer
+    volumes:
+      # 將本地目錄掛載到容器中，便於保存分析結果
+      - ./firmware_samples:/firmware-analysis/firmware_samples
+      - ./binwalk-analysis:/firmware-analysis/binwalk-analysis
+      - ./hexdump-analysis:/firmware-analysis/hexdump-analysis
+      - ./yara-rules:/firmware-analysis/yara-rules
+      - ./screenshots:/firmware-analysis/screenshots
+      - ./reports:/firmware-analysis/reports
+    # 如果需要持續運行，取消下面的註釋
+    # tty: true
+    environment:
+      - TZ=Asia/Taipei
+    restart: unless-stopped
+    # 如果需要Web界面，取消下面的註釋
+    # ports:
+    #   - "8080:8080"

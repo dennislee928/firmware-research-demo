@@ -170,6 +170,28 @@ flowchart TD
 4. **查看結果**：
    分析報告將存儲在掛載的`reports`目錄中。
 
+   新增命令行選項支持：
+   -f, --file：指定單個韌體檔案
+   -d, --directory：指定整個目錄進行分析
+   -e, --extension：指定檔案副檔名（與目錄選項一起使用）
+   -r, --recursive：啟用遞迴掃描子目錄
+   -y, --yara-only：只執行 YARA 規則檢測
+   -b, --binwalk-only：只執行 binwalk 分析
+   -x, --extract：提取檔案系統（與 binwalk 一起使用）
+   新增幫助訊息功能：使用 -h 或 --help 可顯示詳細的使用說明
+   改進的目錄掃描功能：
+   可以掃描整個目錄中的所有韌體檔案
+   可以指定檔案類型（副檔名）
+   支持遞迴掃描子目錄
+   增強的分析選項：
+   可以選擇只執行特定分析（YARA 或 binwalk）
+   每個檔案的分析結果都會有自己的日誌和報告檔案
+   使用範例：
+   ./firmware_analyzer.sh firmware.bin：分析單個檔案
+   ./firmware_analyzer.sh -d firmware_samples：分析目錄中所有.bin 檔案
+   ./firmware_analyzer.sh -d firmware_samples -e .img -r：遞迴分析所有.img 檔案
+   ./firmware_analyzer.sh -f firmware.bin -y：只對指定檔案執行 YARA 分析
+
 ## 📑 模擬檢測報告
 
 查看 `simulated_report.md` 了解：

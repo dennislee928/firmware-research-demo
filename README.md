@@ -139,6 +139,37 @@ automotive-firmware-lab/
     can_log_parser_cli.png – Python log parser 的輸出範例
 ```
 
+```
+### Automation
+建議腳本命名與使用情境
+腳本檔名	使用情境	說明
+unpack_firmware.sh	解包 firmware 並整理結果	使用 binwalk 解包 .bin/.img 檔案並移動結果
+run_yara_scan.sh	對解包後的檔案執行 YARA 掃描	掃描是否含有 telnetd、dropbear、QNX、AUTOSAR 等 signature
+analyze_with_ghidra.sh	用 Ghidra CLI 載入並建立專案	可自動建立 Ghidra project 並匯入 ELF（需 Ghidra 安裝）
+simulate_can_log.sh	產生 CAN 訊息並送入解析器	生成一組 CAN Bus message 並呼叫 Python log parser
+generate_report.sh	根據 YARA 掃描與分析輸出報告	統整偵測結果與風險點，存成 markdown 報告格式
+```
+
+```
+💡 建議加值操作
+
+    在專案根目錄新增 .env 設定預設掃描目錄
+
+    用 Makefile 或 taskfile.yml 管理這些 .sh 流程
+
+    撰寫 README 教學使用流程（我可以幫你寫）
+```
+
+```
+
+進行：
+在專案根目錄新增 .env 設定預設掃描目錄
+
+用 Makefile 或 taskfile.yml 管理這些 .sh 流程
+
+撰寫 README 教學使用流程
+```
+
 🧱 Planned Modules
 
     autosar-finder: detect common AUTOSAR configs inside firmware

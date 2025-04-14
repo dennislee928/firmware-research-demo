@@ -1,0 +1,103 @@
+{
+  "messages": [
+    {
+      "timestamp": "",
+      "can_id": "0x123",
+      "data_length": 8,
+      "data": [
+        "01",
+        "02",
+        "03",
+        "04",
+        "05",
+        "06",
+        "07",
+        "08"
+      ]
+    },
+    {
+      "timestamp": "",
+      "can_id": "0x456",
+      "data_length": 4,
+      "data": [
+        "AA",
+        "BB",
+        "CC",
+        "DD"
+      ]
+    },
+    {
+      "timestamp": "",
+      "can_id": "0x789",
+      "data_length": 2,
+      "data": [
+        "FF",
+        "EE"
+      ]
+    },
+    {
+      "timestamp": "",
+      "can_id": "0xABC",
+      "data_length": 8,
+      "data": [
+        "11",
+        "22",
+        "33",
+        "44",
+        "55",
+        "66",
+        "77",
+        "88"
+      ]
+    },
+    {
+      "timestamp": "",
+      "can_id": "0xDEF",
+      "data_length": 1,
+      "data": [
+        "99"
+      ]
+    },
+    {
+      "timestamp": "",
+      "can_id": "0x789",
+      "data_length": 2,
+      "data": [
+        "00",
+        "00"
+      ]
+    },
+    {
+      "timestamp": "",
+      "can_id": "0xABC",
+      "data_length": 8,
+      "data": [
+        "00",
+        "00",
+        "00",
+        "00",
+        "00",
+        "00",
+        "00",
+        "00"
+      ]
+    },
+    {
+      "timestamp": "",
+      "can_id": "0xDEF",
+      "data_length": 1,
+      "data": [
+        "00"
+      ]
+    }
+  ],
+  "errors": [
+    "\u6578\u64da\u9577\u5ea6\u4e0d\u5339\u914d: \u9810\u671f 8 \u4f46\u5be6\u969b\u70ba 10",
+    "\u6578\u64da\u9577\u5ea6\u4e0d\u5339\u914d: \u9810\u671f 4 \u4f46\u5be6\u969b\u70ba 6"
+  ],
+  "summary": {
+    "total_messages": 8,
+    "total_errors": 2,
+    "timestamp": "2025-04-14T22:55:07.889398"
+  }
+}

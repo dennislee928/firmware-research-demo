@@ -6,7 +6,7 @@ A practical research lab focused on analyzing embedded firmware used in modern a
 
 ### 環境設定
 
-1. 克隆專案：
+1. clone 專案：
 
 ```bash
 git clone https://github.com/yourusername/automotive-firmware-lab.git

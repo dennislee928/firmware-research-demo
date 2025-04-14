@@ -1,0 +1,7 @@
+// main.c
+#include <stdio.h>
+int main() {
+    printf("AUTOSAR Diagnostic Service Initialized\n");
+    // Simulated ECU firmware logic
+    return 0;
+}

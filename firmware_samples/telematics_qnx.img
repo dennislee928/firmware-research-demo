@@ -1,0 +1,7 @@
+// qnx_mock.c
+int main() {
+    printf("QNX IPC Start\n");
+    printf("Starting GPSd...\n");
+    return 0;
+}
+gcc -static -o telematics_qnx.img qnx_mock.c

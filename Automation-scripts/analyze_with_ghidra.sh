@@ -6,7 +6,7 @@ source "$SCRIPT_DIR/../.env"
 
 FIRMWARE_DIR="$SCRIPT_DIR/../$FIRMWARE_DIR"
 GHIDRA_DIR="$SCRIPT_DIR/../$GHIDRA_DIR"
-GHIDRA_SCRIPT="$SCRIPT_DIR/../$TOOLS_DIR/ExtractStrings.java"
+PYTHON_SCRIPT="$SCRIPT_DIR/../$TOOLS_DIR/extract_strings.py"
 
 # 檢查 Ghidra 是否安裝
 if [ ! -d "$GHIDRA_INSTALL_PATH" ]; then
@@ -43,14 +43,8 @@ PROJECT_PATH="$GHIDRA_DIR/$PROJECT_NAME"
 echo "開始分析韌體: $FIRMWARE_FILE"
 echo "專案將保存在: $PROJECT_PATH"
 
-# 執行 Ghidra 分析
-"$GHIDRA_INSTALL_PATH/support/analyzeHeadless" \
-    "$PROJECT_PATH" \
-    "$PROJECT_NAME" \
-    -import "$FIRMWARE_FILE" \
-    -postScript "$GHIDRA_SCRIPT" \
-    -scriptPath "$SCRIPT_DIR/../$TOOLS_DIR" \
-    -deleteProject
+# 執行 Python 腳本分析
+python3 "$PYTHON_SCRIPT" "$FIRMWARE_FILE"
 
 if [ $? -eq 0 ]; then
     echo "分析完成！"

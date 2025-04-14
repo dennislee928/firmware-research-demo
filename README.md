@@ -12,7 +12,20 @@
 ```bash
 docker pull dennisleetw/firmware-analyzer
 ```
+```bash
+container port set to 3000:3000
+```
+<img width="1186" alt="Screenshot 2025-04-14 at 1 11 12 PM" src="https://github.com/user-attachments/assets/78edafa0-6e1e-4acd-a67c-04fda7e17d88" />
+
+```bash
+open localhost:3000
+```
+![Screenshot 2025-04-14 at 1 11 00 PM](https://github.com/user-attachments/assets/5fb94635-ccb3-4a10-ba0b-89e404ef64bd)
+
 ---
+## Demo:
+https://youtu.be/J5Wb_5GvQmA
+___
 
 ## 📦 專案結構
 

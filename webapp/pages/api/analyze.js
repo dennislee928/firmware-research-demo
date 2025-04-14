@@ -40,6 +40,16 @@ export default async function handler(req, res) {
     // 解析表單數據
     const { fields, files } = await readFormData(req);
 
+    console.log("上傳檔案信息:", files);
+    if (files.firmware) {
+      console.log("檔案屬性:", {
+        filepath: files.firmware.filepath,
+        originalFilename: files.firmware.originalFilename,
+        newFilename: files.firmware.newFilename,
+        mimetype: files.firmware.mimetype,
+      });
+    }
+
     let analysisCommand = "cd /firmware-analysis && ";
     let targetPath = "";
 
@@ -50,9 +60,10 @@ export default async function handler(req, res) {
 
       // 可以添加檢查允許的擴展名
       const allowedExtensions = [".bin", ".img", ".fw", ".pkg", ".dmg"];
-      const fileExtension = path
-        .extname(firmware.originalFilename)
-        .toLowerCase();
+      const fileExtension =
+        firmware && firmware.originalFilename
+          ? path.extname(firmware.originalFilename).toLowerCase()
+          : "";
 
       if (!allowedExtensions.includes(fileExtension)) {
         return res.status(400).json({

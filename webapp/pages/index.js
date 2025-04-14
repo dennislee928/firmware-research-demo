@@ -18,6 +18,11 @@ export default function Home() {
   const [analysisStatus, setAnalysisStatus] = useState("");
   const [scanDirectory, setScanDirectory] = useState("");
   const [fileExtension, setFileExtension] = useState(".bin");
+  const [showTooltip, setShowTooltip] = useState({
+    yara: false,
+    binwalk: false,
+    extract: false,
+  });
 
   // 取得最近的報告
   useEffect(() => {
@@ -211,8 +216,46 @@ export default function Home() {
                       onChange={handleOptionChange}
                       className="mr-2"
                     />
-                    <label htmlFor="yaraOnly">僅執行 YARA 規則檢測</label>
+                    <label
+                      htmlFor="yaraOnly"
+                      className="flex items-center"
+                      onMouseEnter={() =>
+                        setShowTooltip({ ...showTooltip, yara: true })
+                      }
+                      onMouseLeave={() =>
+                        setShowTooltip({ ...showTooltip, yara: false })
+                      }
+                    >
+                      僅執行 YARA 規則檢測
+                      <svg
+                        className="w-4 h-4 ml-1 text-blue-500"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                          clipRule="evenodd"
+                        ></path>
+                      </svg>
+                    </label>
                   </div>
+
+                  {showTooltip.yara && (
+                    <div style={tooltipStyle}>
+                      <p className="font-semibold mb-1">
+                        YARA是一個用於識別和分類惡意軟體的工具
+                      </p>
+                      <ul className="list-disc pl-5 mb-2">
+                        <li>快速檢測韌體中的安全威脅或特定元件</li>
+                        <li>適用於有明確檢測目標的場景（如telnetd服務）</li>
+                        <li>最適合快速分析大量韌體</li>
+                      </ul>
+                      <p className="text-xs text-gray-600">
+                        使用firmware_analyzer.sh的-y參數
+                      </p>
+                    </div>
+                  )}
 
                   <div className="flex items-center">
                     <input
@@ -252,6 +295,20 @@ export default function Home() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              <div className="mt-4 p-3 bg-blue-50 rounded-md text-sm text-blue-800 mb-4">
+                <p className="font-medium">分析選項組合建議：</p>
+                <ul className="list-disc pl-5 mt-1">
+                  <li>
+                    初次分析新韌體：使用完整分析（不選任何「僅執行」選項）
+                  </li>
+                  <li>快速安全檢查：選擇「僅執行YARA規則檢測」</li>
+                  <li>了解韌體結構：選擇「僅執行binwalk分析」</li>
+                  <li>
+                    深入檢查內部檔案：選擇「僅執行binwalk分析」+「提取檔案系統」
+                  </li>
+                </ul>
               </div>
 
               <div className="flex space-x-4">
@@ -303,7 +360,7 @@ export default function Home() {
       </main>
 
       <footer className="mt-12 text-center text-gray-500 text-sm">
-        <p>韌體分析工具 &copy; 2023 Dennis Lee</p>
+        <p>韌體分析工具 &copy; 2025 Dennis Lee</p>
       </footer>
     </div>
   );

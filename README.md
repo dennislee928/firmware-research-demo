@@ -143,7 +143,7 @@ docker logs firmware-analyzer
 ./firmware_analyzer.sh -f firmware.bin -y
 ```
 
-## 📋 使用 Docker 鏡像的完整流程
+## �� 使用 Docker 鏡像的完整流程
 
 以下流程圖展示了用戶如何使用 Docker 鏡像進行韌體分析的完整流程：
 
@@ -203,6 +203,120 @@ flowchart TD
 
 4. **查看結果**：
    分析報告將存儲在掛載的`reports`目錄中。
+
+## 📋 命令行選項
+
+自動化分析腳本支援的選項：
+
+```bash
+使用方式: ./firmware_analyzer.sh [選項] [韌體檔案路徑]
+
+選項:
+  -h, --help               顯示幫助訊息
+  -f, --file <路徑>        指定單個韌體檔案進行分析
+  -d, --directory <路徑>   指定目錄，分析該目錄下所有韌體檔案
+  -e, --extension <副檔名> 與 -d 一起使用，指定要分析的檔案副檔名 (默認: .bin)
+  -r, --recursive          與 -d 一起使用，遞迴分析子目錄
+  -y, --yara-only          僅運行YARA規則檢測
+  -b, --binwalk-only       僅運行binwalk分析
+  -x, --extract            提取檔案系統 (與binwalk一起使用)
+```
+
+### 使用範例
+
+```bash
+# 分析單個檔案
+./firmware_analyzer.sh firmware.bin
+
+# 分析指定目錄中的所有.bin檔案
+./firmware_analyzer.sh -d firmware_samples
+
+# 遞迴分析所有.img檔案
+./firmware_analyzer.sh -d firmware_samples -e .img -r
+
+# 只對指定檔案執行YARA分析
+./firmware_analyzer.sh -f firmware.bin -y
+```
+
+## 📋 使用 command-line/Docker 鏡像的完整流程
+
+以下流程圖展示了用戶如何使用 Docker 鏡像進行韌體分析的完整流程：
+
+**查看結果**：
+分析報告將存儲在掛載的`reports`目錄中。
+
+### Docker 環境中使用命令行選項
+
+在 Docker 容器中使用命令行選項時，需要將選項傳遞給容器內的 `firmware_analyzer.sh` 腳本。以下是幾種常見的使用方式：
+
+#### 使用 `docker run` 直接執行
+
+```bash
+# 分析單個檔案
+docker run -v $(pwd)/firmware_samples:/firmware-analysis/firmware_samples \
+           -v $(pwd)/reports:/firmware-analysis/reports \
+           dennislee928/firmware-analyzer:latest \
+           firmware_analyzer.sh -f /firmware-analysis/firmware_samples/firmware.bin
+
+# 分析目錄中所有 .bin 檔案
+docker run -v $(pwd)/firmware_samples:/firmware-analysis/firmware_samples \
+           -v $(pwd)/reports:/firmware-analysis/reports \
+           dennislee928/firmware-analyzer:latest \
+           firmware_analyzer.sh -d /firmware-analysis/firmware_samples
+
+# 僅執行 YARA 分析
+docker run -v $(pwd)/firmware_samples:/firmware-analysis/firmware_samples \
+           -v $(pwd)/reports:/firmware-analysis/reports \
+           dennislee928/firmware-analyzer:latest \
+           firmware_analyzer.sh -f /firmware-analysis/firmware_samples/firmware.bin -y
+```
+
+#### 使用 `docker-compose` 執行
+
+如果使用 `docker-compose.yml` 進行部署，可以在 `docker-compose.yml` 中定義命令：
+
+```yaml
+version: "3"
+services:
+  firmware-analyzer:
+    image: dennislee928/firmware-analyzer:latest
+    volumes:
+      - ./firmware_samples:/firmware-analysis/firmware_samples
+      - ./reports:/firmware-analysis/reports
+    command: firmware_analyzer.sh -d /firmware-analysis/firmware_samples -r
+```
+
+或者使用 `docker-compose run` 執行特定命令：
+
+```bash
+# 使用 YARA 分析特定檔案
+docker-compose run --rm firmware-analyzer firmware_analyzer.sh -f /firmware-analysis/firmware_samples/firmware.bin -y
+
+# 遞迴分析特定目錄中所有 .img 檔案
+docker-compose run --rm firmware-analyzer firmware_analyzer.sh -d /firmware-analysis/firmware_samples -e .img -r
+```
+
+#### 進入容器執行多個命令
+
+如果需要在容器內執行多個命令，可以先進入容器：
+
+```bash
+# 啟動並進入容器
+docker run -it --rm -v $(pwd)/firmware_samples:/firmware-analysis/firmware_samples \
+                     -v $(pwd)/reports:/firmware-analysis/reports \
+                     dennislee928/firmware-analyzer:latest /bin/bash
+
+# 在容器內執行命令
+firmware_analyzer.sh -h
+firmware_analyzer.sh -f /firmware-analysis/firmware_samples/firmware.bin
+firmware_analyzer.sh -d /firmware-analysis/firmware_samples -e .img -r
+```
+
+#### 注意事項
+
+- 容器內路徑與主機路徑不同，請使用容器內的完整路徑 (例如 `/firmware-analysis/firmware_samples/`)
+- 結果報告會自動保存到掛載的 `reports` 目錄中
+- 建議將韌體檔案放置在 `firmware_samples` 目錄中，以便容器能夠存取
 
 ## 📑 模擬檢測報告
 

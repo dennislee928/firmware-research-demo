@@ -1,1 +1,1 @@
-13:00008000  2f 65 74 63 2f 73 68 61  64 6f 77 00 00 00 00 00  |/etc/shadow.....|
+sample-bin-files-fontawesome-webfont.bin_security_patterns_20250414_130537.txt

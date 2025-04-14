@@ -48,10 +48,13 @@ export default function Home() {
 
   const fetchRecentReports = async () => {
     try {
+      console.log("嘗試獲取報告列表...");
       const response = await axios.get("/api/reports");
+      console.log("報告列表獲取結果:", response.data);
       setRecentReports(response.data.reports);
     } catch (err) {
       console.error("獲取報告列表失敗:", err);
+      setError(`獲取報告列表失敗: ${err.message || "未知錯誤"}`);
     }
   };
 
@@ -343,7 +346,7 @@ export default function Home() {
                   className="btn btn-secondary"
                   disabled={isAnalyzing}
                 >
-                  設置定時分析
+                  設置定時分析（30分鐘一次）
                 </button>
               </div>
             </form>
@@ -353,24 +356,47 @@ export default function Home() {
           <div className="card">
             <h2 className="text-xl font-semibold mb-4">最近分析報告</h2>
 
-            {recentReports.length === 0 ? (
-              <p className="text-gray-500">尚無分析報告</p>
+            {isAnalyzing ? (
+              <p className="text-blue-500">
+                正在分析中，報告將在分析完成後顯示...
+              </p>
             ) : (
-              <ul className="space-y-2">
-                {recentReports.map((report, index) => (
-                  <li key={index} className="border-b border-gray-200 pb-2">
-                    <a
-                      href={`/api/reports/${report.filename}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800"
+              <>
+                {recentReports.length === 0 ? (
+                  <div>
+                    <p className="text-gray-500">尚無分析報告</p>
+                    <p className="text-sm text-orange-500 mt-2">
+                      如果您剛完成分析但未看到報告，請嘗試：
+                    </p>
+                    <ul className="list-disc pl-5 text-sm text-orange-500">
+                      <li>檢查分析命令是否執行成功</li>
+                      <li>點擊下方按鈕重新載入報告列表</li>
+                    </ul>
+                    <button
+                      onClick={fetchRecentReports}
+                      className="mt-2 px-3 py-1 bg-blue-100 text-blue-600 rounded-md text-sm"
                     >
-                      {report.filename}
-                    </a>
-                    <p className="text-sm text-gray-600">{report.date}</p>
-                  </li>
-                ))}
-              </ul>
+                      重新載入報告列表
+                    </button>
+                  </div>
+                ) : (
+                  <ul className="space-y-2">
+                    {recentReports.map((report, index) => (
+                      <li key={index} className="border-b border-gray-200 pb-2">
+                        <a
+                          href={`/api/reports/${report.filename}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          {report.filename}
+                        </a>
+                        <p className="text-sm text-gray-600">{report.date}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
           </div>
         </div>

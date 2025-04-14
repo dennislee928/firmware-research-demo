@@ -1,1 +1,1 @@
-4:00000400  74 65 6c 6e 65 74 64 00  00 00 00 00 00 00 00 00  |telnetd.........|
+sample-bin-files-fontawesome-webfont.bin_telnetd_pattern_20250414_130537.txt

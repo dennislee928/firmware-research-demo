@@ -1,11 +1,12 @@
-# 🔍 Firmware Unpacking & Signature Detection Demo
+# 🔍 韌體解包與特徵檢測演示
 
-本專案展示了我在韌體分析方面的實作探索，主要關注於：
+本專案展示了韌體分析方面的實作探索，主要關注於：
 
 - 🧩 使用 `binwalk` 和 `hexdump` 進行韌體解包
 - 🧠 通過 `Ghidra` 進行靜態字串和模式分析
 - 🧪 使用 `YARA` 進行基於規則的檢測
 - 📑 針對嵌入式系統中元件識別的模擬報告
+- 🐳 Docker 容器化與自動化分析流程
 
 ---
 
@@ -13,26 +14,35 @@
 
 ```bash
 firmware-analysis-demo/
-├── firmware.bin              # 樣本韌體映像檔（公開路由器二進制檔）
-├── binwalk-analysis/         # 使用binwalk解包的目錄
-├── hexdump-analysis/         # 原始十六進位 + 偏移註釋
-├── yara-rules/
-│   └── telnetd_rule.yar      # 自定義規則檢測telnet/ssh守護程序
-├── ghidra-notes.md           # 字串/函數參考 + 註釋圖像
-├── simulated_report.md       # 特徵檢測摘要
-├── can-log-demo.txt          # （選擇性）模擬CAN協議片段
-├── screenshots/              # CLI和GUI使用截圖
-└── README.md
+├── firmware.bin                 # 樣本韌體映像檔
+├── binwalk-analysis/            # 使用binwalk解包的目錄
+├── hexdump-analysis/            # 原始十六進位 + 偏移註釋
+├── yara-rules/                  # YARA規則與檢測結果
+│   ├── telnetd_rule.yar         # 檢測telnet服務的規則
+│   └── network_services_rule.yar # 檢測多種網路服務的規則
+├── ghidra-notes.md              # 字串/函數參考 + 註釋
+├── simulated_report.md          # 特徵檢測摘要
+├── can-log-demo.txt             # 模擬CAN協議片段
+├── screenshots/                 # 分析工具截圖
+├── firmware_samples/            # 韌體樣本儲存目錄
+├── reports/                     # 分析報告輸出目錄
+├── firmware_analyzer.sh         # 自動化分析腳本
+├── setup_cron.sh                # 定時任務設置腳本
+├── Dockerfile                   # Docker映像定義
+├── docker-compose.yml           # Docker環境配置
+└── README.md                    # 本文檔
 ```
 
 ## 🛠️ 使用工具
 
 | 工具    | 用途                  |
 | ------- | --------------------- |
-| binwalk | 韌體提取              |
+| binwalk | 韌體提取與分析        |
 | hexdump | 原始數據檢查          |
 | Ghidra  | 二進制分析 + 字串映射 |
 | YARA    | 基於規則的特徵匹配    |
+| Docker  | 環境容器化與部署      |
+| Cron    | 自動化定期執行分析    |
 
 ## 🔬 實作過程
 
@@ -69,6 +79,36 @@ rule Detect_Telnetd {
 - 成功檢測到解包文件中的 telnetd
 - 可能表明存在不安全的傳統服務
 
+### ✅ 步驟 5：自動化與容器化
+
+- 創建自動化分析腳本執行完整流程
+- 設置定時任務定期分析新韌體
+- 通過 Docker 容器提供一致的分析環境
+
+## 📊 執行方式
+
+以下是不同的執行方式，根據您的需求選擇：
+
+### 本地執行
+
+```bash
+# 運行單次分析
+./firmware_analyzer.sh
+
+# 設定每30分鐘自動執行
+./setup_cron.sh
+```
+
+### Docker 容器執行
+
+```bash
+# 構建並啟動容器化環境
+docker-compose up -d
+
+# 查看執行日誌
+docker logs firmware-analyzer
+```
+
 ## 📑 模擬檢測報告
 
 查看 `simulated_report.md` 了解：
@@ -84,6 +124,7 @@ rule Detect_Telnetd {
 | 理解嵌入式韌體布局 | ✅       |
 | 練習二進制分析工具 | ✅       |
 | 創建自定義檢測特徵 | ✅       |
+| 自動化分析流程     | ✅       |
 | 記錄審查過程       | ✅       |
 
 ## 🧠 後續步驟
@@ -92,13 +133,14 @@ rule Detect_Telnetd {
 - 將模式匹配整合到自動化流程（Python）
 - 探索 binwalk -eM 處理多層映像
 - 學習 radare2 或 IDA Pro 進行更深入分析
+- 擴展容器化部署到雲端環境
 
 ## 📚 參考資源
 
-- Binwalk 文檔
-- YARA 文檔
-- Ghidra 逆向工程指南
-- 韌體樣本
+- [Binwalk 文檔](https://github.com/ReFirmLabs/binwalk)
+- [YARA 規則指南](https://yara.readthedocs.io/)
+- [Ghidra 使用指南](https://ghidra-sre.org/)
+- [Docker 容器化最佳實踐](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/)
 
 ## 💬 聯絡方式
 

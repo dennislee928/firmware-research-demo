@@ -143,7 +143,7 @@ docker logs firmware-analyzer
 ./firmware_analyzer.sh -f firmware.bin -y
 ```
 
-## �� 使用 Docker 鏡像的完整流程
+## 📋 使用 Docker 鏡像的完整流程
 
 以下流程圖展示了用戶如何使用 Docker 鏡像進行韌體分析的完整流程：
 
@@ -317,6 +317,55 @@ firmware_analyzer.sh -d /firmware-analysis/firmware_samples -e .img -r
 - 容器內路徑與主機路徑不同，請使用容器內的完整路徑 (例如 `/firmware-analysis/firmware_samples/`)
 - 結果報告會自動保存到掛載的 `reports` 目錄中
 - 建議將韌體檔案放置在 `firmware_samples` 目錄中，以便容器能夠存取
+
+### 使用 Web 界面
+
+最新版本的韌體分析工具現已支援網頁界面，提供直觀的使用者操作體驗：
+
+#### 啟動 Web 界面
+
+```bash
+# 使用Docker Compose啟動帶有Web界面的容器
+docker-compose up -d
+
+# Web界面將在以下位置可用
+http://localhost:3000
+```
+
+#### Web 界面功能
+
+Web 界面提供以下功能：
+
+1. **韌體檔案上傳**：
+
+   - 直接從瀏覽器上傳韌體檔案進行分析
+   - 支援多種檔案格式 (.bin, .img, .fw)
+
+2. **指定掃描目錄**：
+
+   - 可以指定容器內目錄路徑進行批次分析
+   - 支援按檔案副檔名過濾
+
+3. **自訂分析選項**：
+
+   - 僅執行 YARA 規則檢測
+   - 僅執行 binwalk 分析
+   - 提取檔案系統
+   - 遞迴掃描子目錄
+
+4. **設置定時分析**：
+
+   - 透過網頁界面一鍵設置 cron 定時任務
+
+5. **報告管理**：
+   - 查看最近分析報告列表
+   - 直接在瀏覽器中開啟報告
+
+#### 界面截圖
+
+![韌體分析Web界面](/screenshots/web-interface.png)
+
+Web 界面使得非技術人員也能輕鬆使用這套分析工具，無需記憶複雜的命令行選項。
 
 ## 📑 模擬檢測報告
 

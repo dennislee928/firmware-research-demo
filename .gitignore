@@ -56,3 +56,5 @@ var/
 
 # 保留必要的示例和規則文件
 !yara-rules/*.yar
+
+node_modules/

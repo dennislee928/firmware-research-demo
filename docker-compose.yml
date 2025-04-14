@@ -1,4 +1,4 @@
-version: "3"
+version: "3.8"
 
 services:
   firmware-analyzer:
@@ -8,17 +8,47 @@ services:
     container_name: firmware-analyzer
     volumes:
       # 將本地目錄掛載到容器中，便於保存分析結果
-      - ./firmware_samples:/firmware-analysis/firmware_samples
-      - ./binwalk-analysis:/firmware-analysis/binwalk-analysis
-      - ./hexdump-analysis:/firmware-analysis/hexdump-analysis
-      - ./yara-rules:/firmware-analysis/yara-rules
-      - ./screenshots:/firmware-analysis/screenshots
-      - ./reports:/firmware-analysis/reports
+      - ./firmware_samples:/firmware-analysis/firmware_samples:rw
+      - ./binwalk-analysis:/firmware-analysis/binwalk-analysis:rw
+      - ./hexdump-analysis:/firmware-analysis/hexdump-analysis:rw
+      - ./yara-rules:/firmware-analysis/yara-rules:rw
+      - ./screenshots:/firmware-analysis/screenshots:rw
+      - ./reports:/firmware-analysis/reports:rw
+      - ./logs:/firmware-analysis/logs:rw
     # 如果需要持續運行，取消下面的註釋
     # tty: true
     environment:
       - TZ=Asia/Taipei
+      - ANALYSIS_INTERVAL=30 # 分鐘
+    # 設置容器始終重新啟動，除非手動停止
     restart: unless-stopped
+    # 啟用健康檢查
+    healthcheck:
+      test: ["CMD", "test", "-f", "/firmware-analysis/firmware.bin"]
+      interval: 5m
+      timeout: 3s
+      retries: 3
+      start_period: 30s
     # 如果需要Web界面，取消下面的註釋
     # ports:
     #   - "8080:8080"
+    # 設置資源限制
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+# 若要添加其他服務，例如Web界面或資料庫，可在此處擴展
+# 例如：
+#
+# web-interface:
+#   image: nginx:alpine
+#   ports:
+#     - "8080:80"
+#   volumes:
+#     - ./web:/usr/share/nginx/html
+#   depends_on:
+#     - firmware-analyzer

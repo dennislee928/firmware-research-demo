@@ -42,21 +42,19 @@ export default async function handler(req, res) {
 
     console.log("上傳檔案信息:", files);
     if (files.firmware) {
+      // 檢查是否為陣列
+      const firmware = Array.isArray(files.firmware)
+        ? files.firmware[0]
+        : files.firmware;
       console.log("檔案屬性:", {
-        filepath: files.firmware.filepath,
-        originalFilename: files.firmware.originalFilename,
-        newFilename: files.firmware.newFilename,
-        mimetype: files.firmware.mimetype,
+        filepath: firmware.filepath,
+        originalFilename: firmware.originalFilename,
+        newFilename: firmware.newFilename,
+        mimetype: firmware.mimetype,
       });
-    }
 
-    let analysisCommand = "cd /firmware-analysis && ";
-    let targetPath = "";
-
-    // 處理檔案上傳或目錄掃描
-    if (files.firmware) {
-      const firmware = files.firmware;
-      targetPath = firmware.filepath;
+      // 使用正確的檔案路徑
+      const targetPath = firmware.filepath;
 
       // 可以添加檢查允許的擴展名
       const allowedExtensions = [".bin", ".img", ".fw", ".pkg", ".dmg"];
@@ -72,71 +70,126 @@ export default async function handler(req, res) {
       }
 
       // 構建命令
+      let analysisCommand = "cd /firmware-analysis && ";
       analysisCommand += `./firmware_analyzer.sh -f "${targetPath}"`;
+
+      // 添加分析選項
+      if (fields.yaraOnly === "true") {
+        analysisCommand += " -y";
+      }
+
+      if (fields.binwalkOnly === "true") {
+        analysisCommand += " -b";
+      }
+
+      if (fields.extractFilesystem === "true") {
+        analysisCommand += " -x";
+      }
+
+      if (fields.recursive === "true") {
+        analysisCommand += " -r";
+      }
+
+      // 將分析命令寫入暫存檔以便後續檢查
+      fs.writeFileSync(
+        `/firmware-analysis/logs/job_${jobId}.json`,
+        JSON.stringify({
+          id: jobId,
+          command: analysisCommand,
+          status: "pending",
+          startTime: new Date().toISOString(),
+          targetPath,
+        })
+      );
+
+      // 非同步執行命令
+      exec(analysisCommand, (error, stdout, stderr) => {
+        // 更新任務狀態
+        const status = error ? "failed" : "completed";
+        fs.writeFileSync(
+          `/firmware-analysis/logs/job_${jobId}.json`,
+          JSON.stringify({
+            id: jobId,
+            command: analysisCommand,
+            status,
+            finishTime: new Date().toISOString(),
+            error: error ? error.message : null,
+            stdout,
+            stderr,
+          })
+        );
+      });
+
+      // 返回任務ID給客戶端
+      res.status(200).json({
+        message: "分析任務已啟動",
+        jobId,
+      });
     } else if (fields.scanDirectory) {
       // 使用目錄掃描
+      let analysisCommand = "cd /firmware-analysis && ";
       analysisCommand += `./firmware_analyzer.sh -d "${fields.scanDirectory}"`;
 
       // 添加檔案副檔名（如果有）
       if (fields.fileExtension) {
         analysisCommand += ` -e "${fields.fileExtension}"`;
       }
-    } else {
-      return res.status(400).json({ message: "未提供韌體檔案或掃描目錄" });
-    }
 
-    // 添加分析選項
-    if (fields.yaraOnly === "true") {
-      analysisCommand += " -y";
-    }
+      // 添加分析選項
+      if (fields.yaraOnly === "true") {
+        analysisCommand += " -y";
+      }
 
-    if (fields.binwalkOnly === "true") {
-      analysisCommand += " -b";
-    }
+      if (fields.binwalkOnly === "true") {
+        analysisCommand += " -b";
+      }
 
-    if (fields.extractFilesystem === "true") {
-      analysisCommand += " -x";
-    }
+      if (fields.extractFilesystem === "true") {
+        analysisCommand += " -x";
+      }
 
-    if (fields.recursive === "true") {
-      analysisCommand += " -r";
-    }
+      if (fields.recursive === "true") {
+        analysisCommand += " -r";
+      }
 
-    // 將分析命令寫入暫存檔以便後續檢查
-    fs.writeFileSync(
-      `/firmware-analysis/logs/job_${jobId}.json`,
-      JSON.stringify({
-        id: jobId,
-        command: analysisCommand,
-        status: "pending",
-        startTime: new Date().toISOString(),
-        targetPath,
-      })
-    );
-
-    // 非同步執行命令
-    exec(analysisCommand, (error, stdout, stderr) => {
-      // 更新任務狀態
-      const status = error ? "failed" : "completed";
+      // 將分析命令寫入暫存檔以便後續檢查
       fs.writeFileSync(
         `/firmware-analysis/logs/job_${jobId}.json`,
         JSON.stringify({
           id: jobId,
           command: analysisCommand,
-          status,
-          finishTime: new Date().toISOString(),
-          error: error ? error.message : null,
-          stdout,
-          stderr,
+          status: "pending",
+          startTime: new Date().toISOString(),
+          targetPath: fields.scanDirectory,
         })
       );
-    });
 
-    // 返回任務ID給客戶端
-    res.status(200).json({
-      message: "分析任務已啟動",
-      jobId,
-    });
+      // 非同步執行命令
+      exec(analysisCommand, (error, stdout, stderr) => {
+        // 更新任務狀態
+        const status = error ? "failed" : "completed";
+        fs.writeFileSync(
+          `/firmware-analysis/logs/job_${jobId}.json`,
+          JSON.stringify({
+            id: jobId,
+            command: analysisCommand,
+            status,
+            finishTime: new Date().toISOString(),
+            error: error ? error.message : null,
+            stdout,
+            stderr,
+          })
+        );
+      });
+
+      // 返回任務ID給客戶端
+      res.status(200).json({
+        message: "分析任務已啟動",
+        jobId,
+      });
+    } else {
+      return res.status(400).json({ message: "未提供韌體檔案或掃描目錄" });
+    }
   } catch (error) {
     console.error("分析錯誤:", error);
     res

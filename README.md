@@ -2,6 +2,69 @@
 
 A practical research lab focused on analyzing embedded firmware used in modern automotive systems. This project documents static analysis techniques, firmware unpacking, component detection using YARA rules, and CAN Bus log simulation — all geared toward enhancing automotive cybersecurity.
 
+## 🔧 快速開始
+
+### 環境設定
+
+1. 克隆專案：
+
+```bash
+git clone https://github.com/yourusername/automotive-firmware-lab.git
+cd automotive-firmware-lab
+```
+
+2. 創建必要的目錄結構：
+
+```bash
+make setup
+```
+
+### CAN 日誌模擬
+
+1. 生成模擬的 CAN 日誌：
+
+```bash
+make simulate-can
+```
+
+2. 解析現有的 CAN 日誌：
+
+```bash
+make parse-can
+```
+
+3. 清理生成的文件：
+
+```bash
+make clean
+```
+
+### 配置說明
+
+專案使用 `.env` 文件來管理配置：
+
+```ini
+# 預設目錄設定
+CAN_LOGS_DIR=can_logs      # CAN 日誌存放目錄
+TOOLS_DIR=tools            # 工具腳本目錄
+FIRMWARE_DIR=firmware_samples  # 韌體樣本目錄
+YARA_RULES_DIR=yara_rules    # YARA 規則目錄
+REPORTS_DIR=reports          # 報告輸出目錄
+```
+
+### 目錄結構
+
+```bash
+automotive-firmware-lab/
+├── firmware_samples/        # 韌體樣本
+├── unpacked/               # binwalk 解包結果
+├── yara_rules/             # YARA 規則
+├── can_logs/               # CAN 日誌
+├── tools/                  # 工具腳本
+├── reports/                # 分析報告
+└── docs/                   # 文件
+```
+
 ---
 
 ## 🎯 Project Goals
@@ -43,7 +106,6 @@ automotive-firmware-lab/
 └── README.md
 ```
 
-```
 📁 firmware_samples/
 
     📦 原始韌體樣本，用來進行解包與分析
@@ -137,20 +199,17 @@ automotive-firmware-lab/
     ghidra_telnetd_function_view.png – Ghidra string/function graph
 
     can_log_parser_cli.png – Python log parser 的輸出範例
-```
 
-```
 ### Automation
-建議腳本命名與使用情境
-腳本檔名	使用情境	說明
-unpack_firmware.sh	解包 firmware 並整理結果	使用 binwalk 解包 .bin/.img 檔案並移動結果
-run_yara_scan.sh	對解包後的檔案執行 YARA 掃描	掃描是否含有 telnetd、dropbear、QNX、AUTOSAR 等 signature
-analyze_with_ghidra.sh	用 Ghidra CLI 載入並建立專案	可自動建立 Ghidra project 並匯入 ELF（需 Ghidra 安裝）
-simulate_can_log.sh	產生 CAN 訊息並送入解析器	生成一組 CAN Bus message 並呼叫 Python log parser
-generate_report.sh	根據 YARA 掃描與分析輸出報告	統整偵測結果與風險點，存成 markdown 報告格式
-```
 
-```
+建議腳本命名與使用情境
+腳本檔名 使用情境 說明
+unpack_firmware.sh 解包 firmware 並整理結果 使用 binwalk 解包 .bin/.img 檔案並移動結果
+run_yara_scan.sh 對解包後的檔案執行 YARA 掃描 掃描是否含有 telnetd、dropbear、QNX、AUTOSAR 等 signature
+analyze_with_ghidra.sh 用 Ghidra CLI 載入並建立專案 可自動建立 Ghidra project 並匯入 ELF（需 Ghidra 安裝）
+simulate_can_log.sh 產生 CAN 訊息並送入解析器 生成一組 CAN Bus message 並呼叫 Python log parser
+generate_report.sh 根據 YARA 掃描與分析輸出報告 統整偵測結果與風險點，存成 markdown 報告格式
+
 💡 建議加值操作
 
     在專案根目錄新增 .env 設定預設掃描目錄
@@ -158,17 +217,6 @@ generate_report.sh	根據 YARA 掃描與分析輸出報告	統整偵測結果與
     用 Makefile 或 taskfile.yml 管理這些 .sh 流程
 
     撰寫 README 教學使用流程（我可以幫你寫）
-```
-
-```
-
-進行：
-在專案根目錄新增 .env 設定預設掃描目錄
-
-用 Makefile 或 taskfile.yml 管理這些 .sh 流程
-
-撰寫 README 教學使用流程
-```
 
 🧱 Planned Modules
 

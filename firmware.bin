@@ -1,0 +1,12 @@
+#!/bin/bash
+echo "This is a simulated firmware"
+# Network services
+telnetd -p 2323
+dropbear -p 22
+# Security concerns
+cat /etc/shadow
+# Hardware interfaces
+echo "CAN bus interface initialized"
+# Some binary data
+echo -e "\x7FELF\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x03"
+exit 0

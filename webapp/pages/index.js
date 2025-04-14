@@ -24,6 +24,23 @@ export default function Home() {
     extract: false,
   });
 
+  // 工具提示樣式
+  const tooltipStyle = {
+    position: "absolute",
+    left: "100%",
+    top: "0",
+    marginLeft: "10px",
+    width: "320px",
+    padding: "10px",
+    backgroundColor: "#f0f9ff",
+    borderRadius: "6px",
+    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
+    zIndex: 10,
+    fontSize: "0.875rem",
+    lineHeight: "1.4",
+    border: "1px solid #bae6fd",
+  };
+
   // 取得最近的報告
   useEffect(() => {
     fetchRecentReports();

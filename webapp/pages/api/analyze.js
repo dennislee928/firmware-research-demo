@@ -48,6 +48,18 @@ export default async function handler(req, res) {
       const firmware = files.firmware;
       targetPath = firmware.filepath;
 
+      // 可以添加檢查允許的擴展名
+      const allowedExtensions = [".bin", ".img", ".fw", ".pkg", ".dmg"];
+      const fileExtension = path
+        .extname(firmware.originalFilename)
+        .toLowerCase();
+
+      if (!allowedExtensions.includes(fileExtension)) {
+        return res.status(400).json({
+          message: "不支援的檔案類型，僅支援 .bin, .img, .fw, .pkg, .dmg 格式",
+        });
+      }
+
       // 構建命令
       analysisCommand += `./firmware_analyzer.sh -f "${targetPath}"`;
     } else if (fields.scanDirectory) {

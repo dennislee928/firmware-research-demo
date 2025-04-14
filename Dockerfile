@@ -42,6 +42,15 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash - \
 
 # 檢查Node.js和npm版本
 RUN node -v && npm -v
+# 先apt-get update前添加簽名
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    gnupg \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 871920D1991BC93C
+
+# 再嘗試安裝dmg2img
+RUN apt-get update && apt-get install -y dmg2img
 
 # 安裝Python工具
 RUN pip3 install --no-cache-dir \

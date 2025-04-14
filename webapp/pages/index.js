@@ -52,7 +52,9 @@ export default function Home() {
     e.preventDefault();
 
     if (!file && !scanDirectory) {
-      setError("請選擇要上傳的韌體檔案或指定掃描目錄");
+      setError(
+        "請選擇要上傳的韌體檔案或指定掃描目錄(僅限 .bin, .img, .fw, .pkg, .dmg 格式)"
+      );
       return;
     }
 
@@ -162,12 +164,14 @@ export default function Home() {
 
             <form onSubmit={handleUpload}>
               <div className="mb-4">
-                <label className="label">上傳韌體檔案</label>
+                <label className="label">
+                  上傳韌體檔案(僅限 .bin, .img, .fw, .pkg, .dmg 格式)
+                </label>
                 <input
                   type="file"
                   onChange={handleFileChange}
                   className="input"
-                  accept=".bin,.img,.fw"
+                  accept=".bin,.img,.fw,.pkg,.dmg"
                 />
               </div>
 

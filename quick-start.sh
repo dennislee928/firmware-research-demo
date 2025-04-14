@@ -1,0 +1,1 @@
+make clean && make setup && make simulate-can && make analyze-with-ghidra && make run-yara-scan && make generate-report

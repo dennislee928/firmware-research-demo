@@ -1,55 +1,54 @@
 #!/bin/bash
 
 # 設定目錄
-FIRMWARE_DIR="../firmware_samples"
-GHIDRA_DIR="../ghidra_projects"
-GHIDRA_INSTALL="/path/to/ghidra"  # 請修改為實際的 Ghidra 安裝路徑
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FIRMWARE_DIR="$SCRIPT_DIR/../firmware_samples"
+GHIDRA_DIR="$SCRIPT_DIR/../ghidra_projects"
 
 # 檢查 Ghidra 是否安裝
-if [ ! -d "$GHIDRA_INSTALL" ]; then
-    echo "錯誤：Ghidra 未安裝或路徑不正確"
+if ! command -v analyzeHeadless &> /dev/null; then
+    echo "錯誤：Ghidra 未安裝或不在 PATH 中"
+    echo "請確保 Ghidra 已正確安裝並設置環境變數"
     exit 1
 fi
 
 # 檢查目錄是否存在
 if [ ! -d "$FIRMWARE_DIR" ]; then
-    echo "錯誤：$FIRMWARE_DIR 目錄不存在"
+    echo "錯誤：韌體目錄不存在"
+    echo "請確保以下目錄存在："
+    echo "- $FIRMWARE_DIR"
     exit 1
 fi
 
 # 創建 Ghidra 專案目錄
 mkdir -p "$GHIDRA_DIR"
 
-# 處理所有韌體檔案
-for firmware in "$FIRMWARE_DIR"/*.{bin,img,chk}; do
-    if [ -f "$firmware" ]; then
-        echo "分析韌體: $(basename "$firmware")"
-        
-        # 創建專案名稱
-        project_name="$(basename "$firmware")_$TIMESTAMP"
-        project_path="$GHIDRA_DIR/$project_name"
-        
-        # 創建專案目錄
-        mkdir -p "$project_path"
-        
-        # 執行 Ghidra 分析
-        echo "執行 Ghidra 分析..."
-        "$GHIDRA_INSTALL/support/analyzeHeadless" \
-            "$project_path" \
-            "$project_name" \
-            -import "$firmware" \
-            -postScript ExtractStrings.java \
-            -deleteProject
-        
-        # 檢查執行結果
-        if [ $? -eq 0 ]; then
-            echo "成功分析: $(basename "$firmware")"
-            echo "專案目錄: $project_path"
-        else
-            echo "錯誤：分析失敗: $(basename "$firmware")"
-        fi
-    fi
-done
+# 獲取韌體文件
+FIRMWARE_FILE=$(find "$FIRMWARE_DIR" -type f \( -name "*.bin" -o -name "*.img" -o -name "*.elf" \) | head -n 1)
 
-echo "所有韌體分析完成" 
+if [ -z "$FIRMWARE_FILE" ]; then
+    echo "錯誤：未找到韌體文件"
+    echo "請在 $FIRMWARE_DIR 目錄中放置韌體文件"
+    exit 1
+fi
+
+# 生成專案名稱
+PROJECT_NAME=$(basename "$FIRMWARE_FILE" | cut -d. -f1)
+PROJECT_PATH="$GHIDRA_DIR/$PROJECT_NAME"
+
+echo "開始分析韌體: $FIRMWARE_FILE"
+echo "專案將保存在: $PROJECT_PATH"
+
+# 執行 Ghidra 分析
+analyzeHeadless "$PROJECT_PATH" "$PROJECT_NAME" \
+    -import "$FIRMWARE_FILE" \
+    -postScript ExtractStrings.java \
+    -scriptPath "$SCRIPT_DIR/../tools" \
+    -deleteProject
+
+if [ $? -eq 0 ]; then
+    echo "分析完成！"
+    echo "結果保存在: $PROJECT_PATH"
+else
+    echo "錯誤：分析失敗"
+fi 

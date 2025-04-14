@@ -1,7 +1,7 @@
 {
   "messages": [
     {
-      "timestamp": "",
+      "timestamp": "2025-04-14 23:00:06",
       "can_id": "0x123",
       "data_length": 8,
       "data": [
@@ -16,7 +16,7 @@
       ]
     },
     {
-      "timestamp": "",
+      "timestamp": "2025-04-14 23:00:06",
       "can_id": "0x456",
       "data_length": 4,
       "data": [
@@ -27,7 +27,7 @@
       ]
     },
     {
-      "timestamp": "",
+      "timestamp": "2025-04-14 23:00:06",
       "can_id": "0x789",
       "data_length": 2,
       "data": [
@@ -36,7 +36,7 @@
       ]
     },
     {
-      "timestamp": "",
+      "timestamp": "2025-04-14 23:00:06",
       "can_id": "0xABC",
       "data_length": 8,
       "data": [
@@ -51,7 +51,7 @@
       ]
     },
     {
-      "timestamp": "",
+      "timestamp": "2025-04-14 23:00:06",
       "can_id": "0xDEF",
       "data_length": 1,
       "data": [
@@ -59,7 +59,7 @@
       ]
     },
     {
-      "timestamp": "",
+      "timestamp": "2025-04-14 23:00:06",
       "can_id": "0x789",
       "data_length": 2,
       "data": [
@@ -68,7 +68,7 @@
       ]
     },
     {
-      "timestamp": "",
+      "timestamp": "2025-04-14 23:00:06",
       "can_id": "0xABC",
       "data_length": 8,
       "data": [
@@ -83,7 +83,7 @@
       ]
     },
     {
-      "timestamp": "",
+      "timestamp": "2025-04-14 23:00:06",
       "can_id": "0xDEF",
       "data_length": 1,
       "data": [
@@ -98,6 +98,6 @@
   "summary": {
     "total_messages": 8,
     "total_errors": 2,
-    "timestamp": "2025-04-14T22:55:07.889398"
+    "timestamp": "2025-04-14T23:00:06.915760"
   }
 }

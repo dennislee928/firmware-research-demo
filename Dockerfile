@@ -63,8 +63,12 @@ RUN mkdir -p /firmware-analysis/binwalk-analysis \
 # 複製腳本和配置文件
 COPY firmware_analyzer.sh setup_cron.sh README.md /firmware-analysis/
 
-# 複製YARA規則（如果存在）
-COPY yara-rules/*.yar /firmware-analysis/yara-rules/ 2>/dev/null || true
+# 複製YARA規則
+# 先創建一個空的規則文件，確保目錄非空
+RUN touch /firmware-analysis/yara-rules/empty.yar
+
+# 如果存在yara-rules目錄，則複製其內容
+COPY yara-rules/ /firmware-analysis/yara-rules/
 
 # 設置腳本執行權限
 RUN chmod +x /firmware-analysis/firmware_analyzer.sh /firmware-analysis/setup_cron.sh

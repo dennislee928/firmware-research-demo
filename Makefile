@@ -1,4 +1,4 @@
-.PHONY: all setup clean simulate-can parse-can help install-deps analyze-with-ghidra run-yara-scan generate-report
+.PHONY: all setup clean simulate-can parse-can help install-deps analyze-with-ghidra run-yara-scan generate-report generate-report-image
 
 # 載入環境變數
 include .env
@@ -28,6 +28,7 @@ clean:
 	@rm -f $(CAN_LOGS_DIR)/*.yaml
 	@rm -f $(GHIDRA_DIR)/*.txt
 	@rm -f $(REPORTS_DIR)/*.md
+	@rm -f $(REPORTS_DIR)/*.png
 	@echo "已清理所有生成的文件"
 
 # 模擬 CAN 日誌
@@ -55,6 +56,11 @@ generate-report:
 	@echo "生成分析報告..."
 	@./automation-scripts/generate_report.sh
 
+# 生成報表圖片
+generate-report-image:
+	@echo "生成報表圖片..."
+	@./automation-scripts/report_image_generation.sh
+
 # 顯示幫助信息
 help:
 	@echo "使用方法："
@@ -65,4 +71,5 @@ help:
 	@echo "  make analyze-with-ghidra - 使用 Ghidra 分析韌體"
 	@echo "  make run-yara-scan      - 執行 YARA 掃描"
 	@echo "  make generate-report    - 生成分析報告"
+	@echo "  make generate-report-image - 生成報表圖片"
 	@echo "  make clean              - 清理生成的文件" 

@@ -39,6 +39,14 @@ if ! command -v yara &> /dev/null; then
     exit 1
 fi
 
+if ! command -v gnuplot &> /dev/null; then
+    echo "警告：gnuplot 未安裝，將無法生成報表圖片"
+    echo "請執行：brew install gnuplot"
+    GNUPLOT_INSTALLED=false
+else
+    GNUPLOT_INSTALLED=true
+fi
+
 # 檢查必要的工具
 check_tools() {
     local tools=("python3" "pip3" "make")
@@ -112,11 +120,19 @@ main() {
 
     # 生成報告
     make generate-report
+
+    # 如果 gnuplot 已安裝，生成報表圖片
+    if [ "$GNUPLOT_INSTALLED" = true ]; then
+        make generate-report-image
+    fi
     
     if [ $? -eq 0 ]; then
         echo "分析流程完成！"
         if [ "$GHIDRA_INSTALLED" = false ]; then
             echo "注意：Ghidra 分析步驟被跳過"
+        fi
+        if [ "$GNUPLOT_INSTALLED" = false ]; then
+            echo "注意：報表圖片生成步驟被跳過"
         fi
     else
         echo "錯誤：分析流程失敗"

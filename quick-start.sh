@@ -16,6 +16,30 @@ check_directories() {
 }
 
 # 檢查必要的工具
+echo "開始環境檢查..."
+
+# 檢查 Ghidra
+if [ -f "/opt/homebrew/bin/ghidraRun" ]; then
+    echo "Ghidra 已安裝"
+    GHIDRA_INSTALLED=true
+else
+    echo "警告：Ghidra 未安裝或路徑不正確"
+    echo "將跳過 Ghidra 分析步驟"
+    GHIDRA_INSTALLED=false
+fi
+
+# 檢查其他工具
+if ! command -v python3 &> /dev/null; then
+    echo "錯誤：Python 3 未安裝"
+    exit 1
+fi
+
+if ! command -v yara &> /dev/null; then
+    echo "錯誤：YARA 未安裝"
+    exit 1
+fi
+
+# 檢查必要的工具
 check_tools() {
     local tools=("python3" "pip3" "make")
     for tool in "${tools[@]}"; do
@@ -51,16 +75,6 @@ check_firmware() {
     return 0
 }
 
-# 檢查 Ghidra
-check_ghidra() {
-    if [ ! -d "$GHIDRA_INSTALL_PATH" ]; then
-        echo "警告：Ghidra 未安裝或路徑不正確"
-        echo "將跳過 Ghidra 分析步驟"
-        return 1
-    fi
-    return 0
-}
-
 # 主程序
 main() {
     echo "開始環境檢查..."
@@ -71,29 +85,37 @@ main() {
     check_python_deps || exit 1
     check_firmware || exit 1
     
-    # 檢查 Ghidra
-    GHIDRA_AVAILABLE=0
-    check_ghidra && GHIDRA_AVAILABLE=1
-    
     echo "環境檢查完成，開始執行分析流程..."
     
-    # 執行分析流程
-    make clean && \
-    make setup && \
+    # 清理舊文件
+    make clean
+
+    # 安裝依賴
+    make install-deps
+
+    # 創建目錄結構
+    make setup
+
+    # 模擬 CAN 日誌
     make simulate-can
-    
-    # 只在 Ghidra 可用時執行 Ghidra 分析
-    if [ $GHIDRA_AVAILABLE -eq 1 ]; then
+
+    # 解析 CAN 日誌
+    make parse-can
+
+    # 執行 YARA 掃描
+    make run-yara-scan
+
+    # 如果 Ghidra 已安裝，執行 Ghidra 分析
+    if [ "$GHIDRA_INSTALLED" = true ]; then
         make analyze-with-ghidra
     fi
-    
-    # 繼續執行其他步驟
-    make run-yara-scan && \
+
+    # 生成報告
     make generate-report
     
     if [ $? -eq 0 ]; then
         echo "分析流程完成！"
-        if [ $GHIDRA_AVAILABLE -eq 0 ]; then
+        if [ "$GHIDRA_INSTALLED" = false ]; then
             echo "注意：Ghidra 分析步驟被跳過"
         fi
     else

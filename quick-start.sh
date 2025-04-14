@@ -51,28 +51,51 @@ check_firmware() {
     return 0
 }
 
+# 檢查 Ghidra
+check_ghidra() {
+    if [ ! -d "$GHIDRA_INSTALL_PATH" ]; then
+        echo "警告：Ghidra 未安裝或路徑不正確"
+        echo "將跳過 Ghidra 分析步驟"
+        return 1
+    fi
+    return 0
+}
+
 # 主程序
 main() {
     echo "開始環境檢查..."
     
-    # 執行檢查
+    # 執行基本檢查
     check_directories || exit 1
     check_tools || exit 1
     check_python_deps || exit 1
     check_firmware || exit 1
+    
+    # 檢查 Ghidra
+    GHIDRA_AVAILABLE=0
+    check_ghidra && GHIDRA_AVAILABLE=1
     
     echo "環境檢查完成，開始執行分析流程..."
     
     # 執行分析流程
     make clean && \
     make setup && \
-    make simulate-can && \
-    make analyze-with-ghidra && \
+    make simulate-can
+    
+    # 只在 Ghidra 可用時執行 Ghidra 分析
+    if [ $GHIDRA_AVAILABLE -eq 1 ]; then
+        make analyze-with-ghidra
+    fi
+    
+    # 繼續執行其他步驟
     make run-yara-scan && \
     make generate-report
     
     if [ $? -eq 0 ]; then
         echo "分析流程完成！"
+        if [ $GHIDRA_AVAILABLE -eq 0 ]; then
+            echo "注意：Ghidra 分析步驟被跳過"
+        fi
     else
         echo "錯誤：分析流程失敗"
         exit 1

@@ -1,120 +1,113 @@
 # 🔍 Firmware Unpacking & Signature Detection Demo
 
-This project demonstrates my hands-on exploration of firmware analysis, focusing on:
+本專案展示了我在韌體分析方面的實作探索，主要關注於：
 
-- 🧩 Firmware unpacking using `binwalk` and `hexdump`
-- 🧠 Static string and pattern analysis via `Ghidra`
-- 🧪 Rule-based detection using `YARA`
-- 📑 Simulated report for component recognition in embedded systems
+- 🧩 使用 `binwalk` 和 `hexdump` 進行韌體解包
+- 🧠 通過 `Ghidra` 進行靜態字串和模式分析
+- 🧪 使用 `YARA` 進行基於規則的檢測
+- 📑 針對嵌入式系統中元件識別的模擬報告
 
 ---
 
-## 📦 Structure
+## 📦 專案結構
 
 ```bash
 firmware-analysis-demo/
-├── firmware.bin              # Sample firmware image (public router bin)
-├── binwalk-analysis/         # Unpacked directory using binwalk
-├── hexdump-analysis/         # Raw hex + offset annotations
+├── firmware.bin              # 樣本韌體映像檔（公開路由器二進制檔）
+├── binwalk-analysis/         # 使用binwalk解包的目錄
+├── hexdump-analysis/         # 原始十六進位 + 偏移註釋
 ├── yara-rules/
-│   └── telnetd_rule.yar      # Custom rule detecting telnet/ssh daemon
-├── ghidra-notes.md           # String/function references + annotated images
-├── simulated_report.md       # Signature detection summary
-├── can-log-demo.txt          # (Optional) Simulated CAN protocol snippet
-├── screenshots/              # CLI and GUI usage
+│   └── telnetd_rule.yar      # 自定義規則檢測telnet/ssh守護程序
+├── ghidra-notes.md           # 字串/函數參考 + 註釋圖像
+├── simulated_report.md       # 特徵檢測摘要
+├── can-log-demo.txt          # （選擇性）模擬CAN協議片段
+├── screenshots/              # CLI和GUI使用截圖
 └── README.md
+```
 
+## 🛠️ 使用工具
 
-🛠️ Tools Used
-Tool	Purpose
-binwalk	Firmware extraction
-hexdump	Raw data inspection
-Ghidra	Binary analysis + string mapping
-YARA	Rule-based signature matching
+| 工具    | 用途                  |
+| ------- | --------------------- |
+| binwalk | 韌體提取              |
+| hexdump | 原始數據檢查          |
+| Ghidra  | 二進制分析 + 字串映射 |
+| YARA    | 基於規則的特徵匹配    |
 
-🔬 What I Did
-✅ Step 1: Unpack Firmware with binwalk
+## 🔬 實作過程
 
-    Extracted file system and component headers
+### ✅ 步驟 1：使用 binwalk 解包韌體
 
-    Identified compressed payloads and ELF headers
-    → See /binwalk-analysis/
+- 提取檔案系統和元件標頭
+- 識別壓縮載荷和 ELF 標頭
+- → 查看 `/binwalk-analysis/`
 
-✅ Step 2: Inspect with hexdump
+### ✅ 步驟 2：使用 hexdump 進行檢查
 
-    Viewed offsets of known patterns (telnetd, dropbear, /etc/shadow)
+- 檢視已知模式的偏移（telnetd, dropbear, /etc/shadow）
+- 對潛在規則映射位元組範圍
+- → 查看 `/hexdump-analysis/`
 
-    Mapped byte ranges for potential rules
-    → See /hexdump-analysis/
+### ✅ 步驟 3：使用 Ghidra 進行分析
 
-✅ Step 3: Analyze with Ghidra
+- 將.bin 載入 Ghidra
+- 使用「已定義字串」和「函數圖」視圖
+- 定位嵌入式服務（例如，BusyBox, sshd）
+- 💡 在 `/screenshots/` 中包含 Ghidra 分析截圖
 
-    Loaded .bin into Ghidra
+### ✅ 步驟 4：編寫並運行 YARA 規則
 
-    Used "Defined Strings" and "Function Graph" views
-
-    Located embedded services (e.g., BusyBox, sshd)
-
-    💡 Screenshot of Ghidra analysis included in /screenshots/
-
-✅ Step 4: Write & Run YARA Rule
-
+```
 rule Detect_Telnetd {
     strings:
         $telnet = "telnetd"
     condition:
         $telnet
 }
+```
 
+- 成功檢測到解包文件中的 telnetd
+- 可能表明存在不安全的傳統服務
 
-    Successfully detected telnetd in unpacked files
+## 📑 模擬檢測報告
 
-    Possible indicator of insecure legacy service
+查看 `simulated_report.md` 了解：
 
-📑 Simulated Detection Report
+- 匹配元件
+- 風險評估
+- 映射到檢測特徵格式
 
-See simulated_report.md for:
+## 🎯 實作成果
 
-    Matching components
+| 目標               | 達成狀態 |
+| ------------------ | -------- |
+| 理解嵌入式韌體布局 | ✅       |
+| 練習二進制分析工具 | ✅       |
+| 創建自定義檢測特徵 | ✅       |
+| 記錄審查過程       | ✅       |
 
-    Risk assessment
+## 🧠 後續步驟
 
-    Mapping to detection signature format
+- 使用 YARA 正則表達式和元數據擴展規則集
+- 將模式匹配整合到自動化流程（Python）
+- 探索 binwalk -eM 處理多層映像
+- 學習 radare2 或 IDA Pro 進行更深入分析
 
-🎯 Outcome
-Objective	Achieved
-Understand embedded firmware layout	✅
-Practice binary analysis tools	✅
-Create a custom detection signature	✅
-Document the process for review	✅
-🧠 Next Steps
+## 📚 參考資源
 
-    Expand ruleset with YARA regexes & metadata
+- Binwalk 文檔
+- YARA 文檔
+- Ghidra 逆向工程指南
+- 韌體樣本
 
-    Integrate pattern match into automation (Python)
-
-    Explore binwalk -eM for multi-layer images
-
-    Learn radare2 or IDA Pro for deeper analysis
-
-📚 Resources Used
-
-    Binwalk Documentation
-
-    YARA Docs
-
-    Ghidra Reverse Engineering Guide
-
-    Firmware Sample
-
-💬 Contact
+## 💬 聯絡方式
 
 Dennis Lee
-🔗 GitHub: @dennislee928
-🔗 Portfolio: next-js-portfolio
-📧 Email available upon request
 
+- 🔗 GitHub: @dennislee928
+- 🔗 作品集: next-js-portfolio
+- 📧 需要時可提供電子郵件
 
 ---
-https://sergioprado.blog/reverse-engineering-router-firmware-with-binwalk/
 
+參考資料：https://sergioprado.blog/reverse-engineering-router-firmware-with-binwalk/

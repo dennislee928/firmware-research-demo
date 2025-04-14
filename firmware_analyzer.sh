@@ -1,7 +1,7 @@
 #!/bin/bash
 #===============================================================================
 # 韌體分析自動化腳本
-# 版本: 2.0
+# 版本: 2.1
 # 作者: Dennis Lee
 # 描述: 自動化執行韌體分析，包含hexdump分析、YARA規則檢測、
 #       binwalk分析，以及生成各類分析報告
@@ -9,6 +9,100 @@
 
 # 嚴格模式，避免常見錯誤
 set -euo pipefail
+
+#===============================================================================
+# 使用幫助
+#===============================================================================
+show_help() {
+  echo "使用方式: $0 [選項] [韌體檔案路徑]"
+  echo ""
+  echo "選項:"
+  echo "  -h, --help               顯示此幫助訊息"
+  echo "  -f, --file <路徑>        指定單個韌體檔案進行分析"
+  echo "  -d, --directory <路徑>   指定目錄，分析該目錄下所有韌體檔案"
+  echo "  -e, --extension <副檔名> 與 -d 一起使用，指定要分析的檔案副檔名 (默認: .bin)"
+  echo "  -r, --recursive          與 -d 一起使用，遞迴分析子目錄"
+  echo "  -y, --yara-only          僅運行YARA規則檢測"
+  echo "  -b, --binwalk-only       僅運行binwalk分析"
+  echo "  -x, --extract            提取檔案系統 (與binwalk一起使用)"
+  echo ""
+  echo "範例:"
+  echo "  $0                                  # 分析默認韌體檔案 (firmware.bin)"
+  echo "  $0 -f firmware_samples/sample.bin   # 分析指定韌體檔案"
+  echo "  $0 -d firmware_samples              # 分析指定目錄中的所有.bin檔案"
+  echo "  $0 -d firmware_samples -e .img      # 分析指定目錄中的所有.img檔案"
+  echo "  $0 -d firmware_samples -r           # 遞迴分析指定目錄及其子目錄中的所有.bin檔案"
+  echo "  $0 -f firmware.bin -y               # 僅對指定檔案運行YARA規則檢測"
+  echo "  $0 -f firmware.bin -b -x            # 僅對指定檔案運行binwalk分析並提取檔案系統"
+}
+
+# 處理命令行參數
+TARGET_FILE=""
+TARGET_DIR=""
+FILE_EXTENSION=".bin"
+RECURSIVE=0
+YARA_ONLY=0
+BINWALK_ONLY=0
+EXTRACT_FILESYSTEM=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      show_help
+      exit 0
+      ;;
+    -f|--file)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        TARGET_FILE="$2"
+        shift 2
+      else
+        echo "錯誤: --file 需要一個檔案路徑參數" >&2
+        exit 1
+      fi
+      ;;
+    -d|--directory)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        TARGET_DIR="$2"
+        shift 2
+      else
+        echo "錯誤: --directory 需要一個目錄路徑參數" >&2
+        exit 1
+      fi
+      ;;
+    -e|--extension)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        FILE_EXTENSION="$2"
+        shift 2
+      else
+        echo "錯誤: --extension 需要一個副檔名參數" >&2
+        exit 1
+      fi
+      ;;
+    -r|--recursive)
+      RECURSIVE=1
+      shift
+      ;;
+    -y|--yara-only)
+      YARA_ONLY=1
+      shift
+      ;;
+    -b|--binwalk-only)
+      BINWALK_ONLY=1
+      shift
+      ;;
+    -x|--extract)
+      EXTRACT_FILESYSTEM=1
+      shift
+      ;;
+    *)
+      # 如果沒有使用-f選項但提供了參數，視為韌體檔案路徑
+      if [ -z "$TARGET_FILE" ] && [ -f "$1" ]; then
+        TARGET_FILE="$1"
+      fi
+      shift
+      ;;
+  esac
+done
 
 #===============================================================================
 # 配置變量
@@ -19,7 +113,8 @@ ANALYSIS_INTERVAL=${ANALYSIS_INTERVAL:-30}
 # 設置工作目錄
 WORK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 FIRMWARE_SAMPLES="$WORK_DIR/firmware_samples"
-FIRMWARE_FILE="${1:-$WORK_DIR/firmware.bin}"
+# 如果使用命令行參數指定了檔案，優先使用它
+FIRMWARE_FILE="${TARGET_FILE:-$WORK_DIR/firmware.bin}"
 FIRMWARE_NAME=$(basename "$FIRMWARE_FILE")
 DATE_TAG="$(date "+%Y%m%d_%H%M%S")"
 LOG_DIR="$WORK_DIR/logs"
@@ -425,13 +520,69 @@ check_directory_structure() {
   fi
 }
 
+# 分析單個檔案
+analyze_single_file() {
+  local file_path="$1"
+  log "INFO" "開始分析檔案: $file_path"
+  
+  # 更新全局變數
+  FIRMWARE_FILE="$file_path"
+  FIRMWARE_NAME=$(basename "$file_path")
+  LOG_FILE="$LOG_DIR/analysis_${FIRMWARE_NAME}_$DATE_TAG.log"
+  REPORT_FILE="$REPORT_DIR/report_${FIRMWARE_NAME}_$DATE_TAG.md"
+  
+  # 根據選項執行不同的分析
+  if [ $YARA_ONLY -eq 1 ]; then
+    run_yara_rules
+  elif [ $BINWALK_ONLY -eq 1 ]; then
+    run_binwalk_analysis
+  else
+    # 執行完整分析
+    perform_hexdump_analysis
+    run_yara_rules
+    run_binwalk_analysis
+    create_security_report
+  fi
+  
+  log "SUCCESS" "檔案分析完成: $file_path"
+}
+
+# 分析目錄中的所有檔案
+analyze_directory() {
+  local dir_path="$1"
+  local extension="$2"
+  local recursive="$3"
+  
+  log "INFO" "分析目錄: $dir_path (檔案類型: *$extension)"
+  
+  # 構建查找命令
+  local find_cmd="find \"$dir_path\""
+  if [ $recursive -eq 0 ]; then
+    find_cmd="$find_cmd -maxdepth 1"
+  fi
+  find_cmd="$find_cmd -type f -name \"*$extension\""
+  
+  # 執行查找並分析每個檔案
+  local file_count=0
+  while IFS= read -r file; do
+    analyze_single_file "$file"
+    file_count=$((file_count + 1))
+  done < <(eval "$find_cmd")
+  
+  if [ $file_count -eq 0 ]; then
+    log "WARNING" "在目錄 $dir_path 中未發現 *$extension 檔案"
+  else
+    log "SUCCESS" "已完成對 $file_count 個檔案的分析"
+  fi
+}
+
 #===============================================================================
 # 主執行流程
 #===============================================================================
 
 # 顯示介紹橫幅
 echo -e "${BLUE}====================================================================${NC}"
-echo -e "${GREEN}                    韌體分析自動化腳本 v2.0                     ${NC}"
+echo -e "${GREEN}                    韌體分析自動化腳本 v2.1                     ${NC}"
 echo -e "${BLUE}====================================================================${NC}"
 echo -e "${YELLOW}作者: Dennis Lee${NC}"
 echo -e "${YELLOW}分析間隔: ${ANALYSIS_INTERVAL}分鐘${NC}"
@@ -443,37 +594,53 @@ mkdir -p "$LOG_DIR"
 
 # 記錄啟動信息
 log "INFO" "韌體分析自動化腳本啟動"
-log "INFO" "韌體文件: $FIRMWARE_FILE"
-log "INFO" "日誌文件: $LOG_FILE"
-log "INFO" "報告文件: $REPORT_FILE"
 
 # 初始化目錄結構
 initialize_directories
 
-# 檢查韌體文件是否存在
-if [ ! -f "$FIRMWARE_FILE" ]; then
-  create_sample_firmware
+# 檢查是否提供了目錄而非單個檔案
+if [ -n "$TARGET_DIR" ]; then
+  if [ ! -d "$TARGET_DIR" ]; then
+    log "ERROR" "指定的目錄不存在: $TARGET_DIR"
+    exit 1
+  fi
+  analyze_directory "$TARGET_DIR" "$FILE_EXTENSION" "$RECURSIVE"
+else
+  # 檢查韌體文件是否存在
+  if [ ! -f "$FIRMWARE_FILE" ]; then
+    if [ -n "$TARGET_FILE" ]; then
+      log "ERROR" "指定的檔案不存在: $FIRMWARE_FILE"
+      exit 1
+    else
+      create_sample_firmware
+    fi
+  fi
+  
+  # 記錄檔案信息
+  log "INFO" "韌體文件: $FIRMWARE_FILE"
+  log "INFO" "日誌文件: $LOG_FILE"
+  log "INFO" "報告文件: $REPORT_FILE"
+  
+  # 分析單個檔案
+  analyze_single_file "$FIRMWARE_FILE"
+  
+  # 如果不是只運行部分分析，則創建其他資料
+  if [ $YARA_ONLY -eq 0 ] && [ $BINWALK_ONLY -eq 0 ]; then
+    create_can_log
+    create_ghidra_notes
+    create_screenshot_readme
+  fi
+  
+  # 檢查目錄結構完整性
+  check_directory_structure
+  
+  # 完成
+  log "SUCCESS" "韌體分析完成，報告已生成: $REPORT_FILE"
 fi
 
-# 執行分析步驟
-perform_hexdump_analysis
-create_yara_rules
-run_yara_rules
-run_binwalk_analysis
-create_can_log
-create_ghidra_notes
-create_security_report
-create_screenshot_readme
-
-# 檢查目錄結構完整性
-check_directory_structure
-
-# 完成
-log "SUCCESS" "韌體分析完成，報告已生成: $REPORT_FILE"
 echo -e "${BLUE}====================================================================${NC}"
 echo -e "${GREEN}                       分析完成                                  ${NC}"
 echo -e "${BLUE}====================================================================${NC}"
 echo -e "${YELLOW}您可以在以下位置查看報告:${NC}"
-echo -e "${YELLOW}  - $REPORT_FILE${NC}"
-echo -e "${YELLOW}  - $WORK_DIR/simulated_report.md${NC}"
+echo -e "${YELLOW}  - $REPORT_DIR/${NC}"
 echo -e "${BLUE}====================================================================${NC}" 

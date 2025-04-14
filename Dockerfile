@@ -2,12 +2,13 @@ FROM ubuntu:22.04
 
 # 元數據標籤
 LABEL maintainer="Dennis Lee"
-LABEL version="1.1"
-LABEL description="韌體分析環境，包含binwalk、hexdump和YARA等工具"
+LABEL version="1.2"
+LABEL description="韌體分析環境，包含binwalk、hexdump、YARA和Next.js前端界面"
 
 # 避免交互式提示
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Taipei
+ENV NODE_VERSION=18.x
 
 # 設置工作目錄
 WORKDIR /firmware-analysis
@@ -20,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     file \
     cron \
+    gnupg \
     && rm -rf /var/lib/apt/lists/*
 
 # 安裝分析工具
@@ -32,6 +34,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tshark \
     xxd \
     && rm -rf /var/lib/apt/lists/*
+
+# 安裝Node.js和npm
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# 檢查Node.js和npm版本
+RUN node -v && npm -v
 
 # 安裝Python工具
 RUN pip3 install --no-cache-dir \
@@ -47,13 +57,14 @@ RUN mkdir -p /firmware-analysis/binwalk-analysis \
     /firmware-analysis/screenshots/ghidra \
     /firmware-analysis/firmware_samples \
     /firmware-analysis/reports \
-    /firmware-analysis/logs
+    /firmware-analysis/logs \
+    /firmware-analysis/webapp
 
 # 複製腳本和配置文件
 COPY firmware_analyzer.sh setup_cron.sh README.md /firmware-analysis/
 
 # 複製YARA規則（如果存在）
-COPY yara-rules/*.yar /firmware-analysis/yara-rules/
+COPY yara-rules/*.yar /firmware-analysis/yara-rules/ || true
 
 # 設置腳本執行權限
 RUN chmod +x /firmware-analysis/firmware_analyzer.sh /firmware-analysis/setup_cron.sh
@@ -61,23 +72,35 @@ RUN chmod +x /firmware-analysis/firmware_analyzer.sh /firmware-analysis/setup_cr
 # 創建一個示例韌體文件
 RUN echo -e "#!/bin/bash\necho 'This is a demo firmware'\ntelnetd -p 2323\ndropbear -p 22\n" > /firmware-analysis/firmware.bin
 
+# 建立前端應用
+WORKDIR /firmware-analysis/webapp
+
+# 初始化 Next.js 應用
+RUN npm init -y && \
+    npm install next@13 react@18 react-dom@18 axios formidable tailwindcss postcss autoprefixer
+
+# 建立 Next.js 目錄結構
+RUN mkdir -p pages api public styles components
+
 # 設置健康檢查
 HEALTHCHECK --interval=5m --timeout=3s \
   CMD test -f /firmware-analysis/firmware.bin || exit 1
 
-# 初始化cron（可選）
-# RUN /firmware-analysis/setup_cron.sh
+# 暴露前端界面端口
+EXPOSE 3000
 
-# 暴露端口（若有Web界面可取消注釋）
-# EXPOSE 8080
+# 複製 Next.js 應用程式
+COPY webapp/ /firmware-analysis/webapp/
 
-# 設置使用非root用戶執行（可選，提高安全性）
-# RUN groupadd -r firmware && useradd -r -g firmware firmware
-# RUN chown -R firmware:firmware /firmware-analysis
-# USER firmware
+# 回到主工作目錄
+WORKDIR /firmware-analysis
+
+# 建立啟動腳本
+RUN echo '#!/bin/bash\ncd /firmware-analysis/webapp\nnpm run dev & cd /firmware-analysis\nexec "$@"' > /firmware-analysis/start.sh && \
+    chmod +x /firmware-analysis/start.sh
 
 # 設置入口點
-ENTRYPOINT ["/bin/bash", "-c"]
+ENTRYPOINT ["/firmware-analysis/start.sh"]
 
 # 默認命令：執行分析後保持容器運行
-CMD ["/firmware-analysis/firmware_analyzer.sh && tail -f /dev/null"] 
+CMD ["tail", "-f", "/dev/null"] 

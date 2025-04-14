@@ -109,6 +109,67 @@ docker-compose up -d
 docker logs firmware-analyzer
 ```
 
+## 📋 使用 Docker 鏡像的完整流程
+
+以下流程圖展示了用戶如何使用 Docker 鏡像進行韌體分析的完整流程：
+
+```mermaid
+flowchart TD
+    A[開始] --> B{已安裝 Docker?}
+    B -->|否| C[安裝 Docker]
+    B -->|是| D[拉取韌體分析鏡像]
+    C --> D
+    D --> E[準備韌體樣本]
+    E --> F[掛載本地目錄]
+    F --> G[啟動容器]
+    G --> H{選擇分析模式}
+    H -->|單次分析| I[執行firmware_analyzer.sh]
+    H -->|定期分析| J[設置cron任務]
+    I --> K[查看分析報告]
+    J --> K
+    K --> L[檢查檢測到的威脅]
+    L --> M{需要深入分析?}
+    M -->|是| N[使用Ghidra進行靜態分析]
+    M -->|否| O[生成最終報告]
+    N --> O
+    O --> P[結束]
+
+    subgraph "Docker命令"
+    Q[docker pull dennislee928/firmware-analyzer:latest]
+    R[docker run -v $(pwd)/firmware_samples:/firmware-analysis/firmware_samples -v $(pwd)/reports:/firmware-analysis/reports dennislee928/firmware-analyzer:latest]
+    S[docker-compose up -d]
+    end
+```
+
+### Docker Hub 使用步驟
+
+1. **拉取鏡像**：
+
+   ```bash
+   docker pull dennislee928/firmware-analyzer:latest
+   ```
+
+2. **執行容器**：
+
+   ```bash
+   docker run -v $(pwd)/firmware_samples:/firmware-analysis/firmware_samples \
+              -v $(pwd)/reports:/firmware-analysis/reports \
+              dennislee928/firmware-analyzer:latest
+   ```
+
+3. **使用 docker-compose**：
+
+   ```bash
+   # 下載docker-compose.yml
+   wget https://raw.githubusercontent.com/dennislee928/firmware-research-demo/main/docker-compose.yml
+
+   # 運行環境
+   docker-compose up -d
+   ```
+
+4. **查看結果**：
+   分析報告將存儲在掛載的`reports`目錄中。
+
 ## 📑 模擬檢測報告
 
 查看 `simulated_report.md` 了解：

@@ -27,7 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 安裝分析工具
 RUN apt-get update && apt-get install -y --no-install-recommends \
     binwalk \
-    hexdump \
+    util-linux \
     yara \
     python3 \
     python3-pip \

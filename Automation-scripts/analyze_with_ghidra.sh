@@ -1,14 +1,18 @@
 #!/bin/bash
 
-# 設定目錄
+# 載入環境變數
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FIRMWARE_DIR="$SCRIPT_DIR/../firmware_samples"
-GHIDRA_DIR="$SCRIPT_DIR/../ghidra_projects"
+source "$SCRIPT_DIR/../.env"
+
+FIRMWARE_DIR="$SCRIPT_DIR/../$FIRMWARE_DIR"
+GHIDRA_DIR="$SCRIPT_DIR/../$GHIDRA_DIR"
+GHIDRA_SCRIPT="$SCRIPT_DIR/../$TOOLS_DIR/ExtractStrings.java"
 
 # 檢查 Ghidra 是否安裝
-if ! command -v analyzeHeadless &> /dev/null; then
-    echo "錯誤：Ghidra 未安裝或不在 PATH 中"
-    echo "請確保 Ghidra 已正確安裝並設置環境變數"
+if [ ! -d "$GHIDRA_INSTALL_PATH" ]; then
+    echo "錯誤：Ghidra 未安裝或路徑不正確"
+    echo "請在 .env 文件中設置正確的 Ghidra 安裝路徑"
+    echo "當前設置的路徑: $GHIDRA_INSTALL_PATH"
     exit 1
 fi
 
@@ -40,10 +44,12 @@ echo "開始分析韌體: $FIRMWARE_FILE"
 echo "專案將保存在: $PROJECT_PATH"
 
 # 執行 Ghidra 分析
-analyzeHeadless "$PROJECT_PATH" "$PROJECT_NAME" \
+"$GHIDRA_INSTALL_PATH/support/analyzeHeadless" \
+    "$PROJECT_PATH" \
+    "$PROJECT_NAME" \
     -import "$FIRMWARE_FILE" \
-    -postScript ExtractStrings.java \
-    -scriptPath "$SCRIPT_DIR/../tools" \
+    -postScript "$GHIDRA_SCRIPT" \
+    -scriptPath "$SCRIPT_DIR/../$TOOLS_DIR" \
     -deleteProject
 
 if [ $? -eq 0 ]; then

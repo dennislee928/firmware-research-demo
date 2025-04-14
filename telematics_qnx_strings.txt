@@ -1,0 +1,6 @@
+0x0: // qnx_mock.c
+0xE: int main() {
+0x1B:     printf("QNX IPC Start\n");
+0x3A:     printf("Starting GPSd...\n");
+0x5C:     return 0;
+0x6C: gcc -static -o telematics_qnx.img qnx_mock.c

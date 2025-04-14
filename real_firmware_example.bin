@@ -1,0 +1,12 @@
+#!/bin/bash
+# 這是一個韌體示例文件頭
+echo -ne "\x7F\x45\x4C\x46\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x03\x00"
+# 模擬文件系統塊
+echo -ne "\x42\x5A\x68\x39\x31\x41\x59\x26\x53\x59" # BZip2 signature
+echo "FILESYSTEMDATA"
+# 模擬網絡服務
+echo "telnetd -p 2323"
+echo "dropbear -p 22"
+# 模擬設備驅動
+echo "/dev/mtd0"
+echo "/etc/shadow" 

@@ -48,21 +48,21 @@ flowchart TD
     D --> E[進階研究]
     E --> F[學習資源]
 
-    B --> B1[ECU 概覽]
-    B --> B2[QNX 系統]
-    B --> B3[CAN 通訊協定]
+    B --> B1[ecu_overview.md]
+    B --> B2[qnx_overview.md]
+    B --> B3[can_automotive_stack.md]
 
-    C --> C1[韌體解包]
-    C --> C2[逆向工程]
-    C --> C3[元件檢測]
+    C --> C1[firmware_unpacked.md]
+    C --> C2[firmware_reverse_eng.md]
+    C --> C3[component_detection.md]
 
-    D --> D1[汽車通訊協定]
-    D --> D2[掃描報告]
+    D --> D1[automotive_protocols&scan_reporting_format.md]
+    D --> D2[simulated_report.md]
 
-    E --> E1[AI 輔助分析]
-    E --> E2[創新威脅研究]
+    E --> E1[ai_assisted_reverse_eng.md]
+    E --> E2[innovative_threat_research.md]
 
-    F --> F1[參考資源]
+    F --> F1[ref.md]
 ```
 
 ### 1. 基礎概念

@@ -18,11 +18,15 @@ echo "開始安裝必要的工具..."
 echo "安裝基本工具..."
 brew install yara
 brew install binwalk
-brew install volatility3
-brew install cuckoo
 brew install pyenv
 brew install pyenv-virtualenv
 brew install pyenv-virtualenvwrapper
+brew install git
+
+# 初始化 pyenv
+echo "初始化 pyenv..."
+eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"
 
 # 安裝 Python 依賴
 echo "安裝 Python 依賴..."
@@ -31,6 +35,16 @@ pip3 install pyelftools
 pip3 install python-magic
 pip3 install colorama
 pip3 install tqdm
+
+# 創建 requirements.txt
+echo "創建 requirements.txt..."
+cat > requirements.txt << 'EOL'
+yara-python>=4.5.1
+pyelftools>=0.32
+python-magic>=0.4.27
+colorama>=0.4.6
+tqdm>=4.67.1
+EOL
 
 # 設定 Python 環境
 echo "設定 Python 環境..."
@@ -47,6 +61,24 @@ pyenv shell firmware-analysis
 # 安裝專案依賴
 echo "安裝專案依賴..."
 pip3 install -r requirements.txt
+
+# 安裝 volatility3
+echo "安裝 volatility3..."
+if [ ! -d "tools/volatility3" ]; then
+    git clone https://github.com/volatilityfoundation/volatility3.git tools/volatility3
+    cd tools/volatility3
+    pip3 install -e .
+    cd ../..
+fi
+
+# 安裝 cuckoo
+echo "安裝 cuckoo..."
+if [ ! -d "tools/cuckoo" ]; then
+    git clone https://github.com/cuckoosandbox/cuckoo.git tools/cuckoo
+    cd tools/cuckoo
+    pip3 install -e .
+    cd ../..
+fi
 
 # 創建必要的目錄結構
 echo "創建目錄結構..."
@@ -118,6 +150,9 @@ TOOLS_DIR=tools
 FIRMWARE_DIR=firmware_samples
 YARA_RULES_DIR=yara_rules
 REPORTS_DIR=reports
+# 工具路徑
+VOLATILITY3_PATH=tools/volatility3
+CUCKOO_PATH=tools/cuckoo
 EOL
 
 echo "安裝完成！"

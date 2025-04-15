@@ -1,0 +1,6 @@
+This is a test firmware file.
+It contains some test strings:
+- BusyBox v1.0.0
+- applets: ls, cat, echo
+- OpenSSL 1.1.1
+- libcrypto.so.1.1

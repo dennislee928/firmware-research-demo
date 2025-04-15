@@ -2,6 +2,13 @@
 
 本專案展示了韌體分析方面相關概念跟資料以及文件：
 
+## 
+## Demo video:
+https://youtu.be/viOC4hCcM64
+[![Watch the demo video](https://img.youtube.com/vi/rHVcB-mxKB8/0.jpg)](https://youtu.be/viOC4hCcM64)
+
+點擊上方影像觀看示範影片
+
 ## 文件架構
 
 ```mermaid

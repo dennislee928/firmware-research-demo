@@ -25,8 +25,13 @@ brew install git
 
 # 初始化 pyenv
 echo "初始化 pyenv..."
-eval "$(pyenv init -)"
-eval "$(pyenv virtualenv-init -)"
+if ! grep -q "pyenv init" ~/.zshrc; then
+    echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.zshrc
+    echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.zshrc
+    echo 'eval "$(pyenv init -)"' >> ~/.zshrc
+    echo 'eval "$(pyenv virtualenv-init -)"' >> ~/.zshrc
+    source ~/.zshrc
+fi
 
 # 安裝 Python 依賴
 echo "安裝 Python 依賴..."
@@ -54,9 +59,10 @@ fi
 
 # 創建虛擬環境
 echo "創建虛擬環境..."
-pyenv virtualenv 3.10.10 firmware-analysis
+if ! pyenv versions | grep -q "firmware-analysis"; then
+    pyenv virtualenv 3.10.10 firmware-analysis
+fi
 pyenv local firmware-analysis
-pyenv shell firmware-analysis
 
 # 安裝專案依賴
 echo "安裝專案依賴..."
@@ -67,15 +73,6 @@ echo "安裝 volatility3..."
 if [ ! -d "tools/volatility3" ]; then
     git clone https://github.com/volatilityfoundation/volatility3.git tools/volatility3
     cd tools/volatility3
-    pip3 install -e .
-    cd ../..
-fi
-
-# 安裝 cuckoo
-echo "安裝 cuckoo..."
-if [ ! -d "tools/cuckoo" ]; then
-    git clone https://github.com/cuckoosandbox/cuckoo.git tools/cuckoo
-    cd tools/cuckoo
     pip3 install -e .
     cd ../..
 fi
@@ -152,9 +149,9 @@ YARA_RULES_DIR=yara_rules
 REPORTS_DIR=reports
 # 工具路徑
 VOLATILITY3_PATH=tools/volatility3
-CUCKOO_PATH=tools/cuckoo
 EOL
 
 echo "安裝完成！"
 echo "請執行以下命令來啟動虛擬環境："
-echo "pyenv shell firmware-analysis"
+echo "source ~/.zshrc"
+echo "pyenv activate firmware-analysis"

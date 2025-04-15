@@ -1,0 +1,5 @@
+yara-python>=4.5.1
+pyelftools>=0.32
+python-magic>=0.4.27
+colorama>=0.4.6
+tqdm>=4.67.1

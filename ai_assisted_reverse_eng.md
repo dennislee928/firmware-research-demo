@@ -30,21 +30,24 @@ mindmap
       惡意軟體樣本庫
       公開漏洞資訊
     Preprocessing
-      反組譯 (Disassembly)
-      控制流圖 (Control Flow Graph) 產生
+      反組譯
+        Disassembly
+      控制流圖
+        Control Flow Graph
       字串與符號提取
-      特徵工程 (Feature Engineering)
+      特徵工程
         Byte Sequence 特徵
         程式碼結構特徵
         API 調用特徵
     Model Training
-      Byte Sequence 分類模型訓練
-      函式命名與功能識別模型訓練
-      漏洞預測模型訓練
-      惡意軟體家族分類模型訓練
+      Byte Sequence 分類模型
+      函式命名與功能識別
+      漏洞預測模型
+      惡意軟體家族分類
     Labeling
       自動化模組標識
-      自動化函式命名與註解
+      自動化函式命名
+      自動化註解
       潛在漏洞標記
       惡意軟體家族標籤
     Analysis & Reporting

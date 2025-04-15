@@ -151,7 +151,30 @@ REPORTS_DIR=reports
 VOLATILITY3_PATH=tools/volatility3
 EOL
 
-echo "安裝完成！"
+# 創建報告目錄結構
+echo "創建報告目錄結構..."
+mkdir -p reports/{raw,processed,summary}
+
+# 更新 pip
+echo "更新 pip..."
+python -m pip install --upgrade pip
+
+# 執行分析腳本
+echo "執行分析腳本..."
+chmod +x scripts/firmware_analyzer.py
+python scripts/firmware_analyzer.py
+
+# 查看分析結果
+echo "查看分析結果..."
+echo -e "\n${Fore.CYAN}[*] 分析結果摘要${Style.RESET_ALL}"
+echo "原始分析結果："
+ls -l reports/raw/
+echo -e "\n處理後結果："
+ls -l reports/processed/
+echo -e "\n總結報告："
+ls -l reports/summary/
+
+echo -e "\n${Fore.GREEN}安裝和分析完成！${Style.RESET_ALL}"
 echo "請執行以下命令來啟動虛擬環境："
 echo "source ~/.zshrc"
 echo "pyenv activate firmware-analysis"

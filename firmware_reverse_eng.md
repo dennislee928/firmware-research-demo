@@ -18,10 +18,24 @@ binwalk -e firmware.img
 
 ### 1.3 注意事項
 
-- **遺失的提取工具**：可能需要安裝額外的提取工具
-- **符號連結**：注意符號連結的處理
-- **輸出目錄**：確保有足夠的磁碟空間和寫入權限
-- **大型檔案**：解包大型韌體可能需要較長時間
+- **遺失的提取工具**
+
+  - 可能需要安裝額外的提取工具
+  - 確保所有依賴項都已安裝
+
+- **符號連結處理**
+
+  - 注意符號連結的處理方式
+  - 確保連結正確解析
+
+- **輸出目錄管理**
+
+  - 確保有足夠的磁碟空間
+  - 確認寫入權限
+
+- **大型檔案處理**
+  - 解包大型韌體可能需要較長時間
+  - 建議使用高性能硬體
 
 ## 2. 靜態分析工具
 
@@ -29,7 +43,8 @@ binwalk -e firmware.img
 
 1. **啟動 Ghidra**
 
-   - 運行 `ghidraRun.bat` (Windows) 或 `ghidraRun` (Linux/macOS)
+   - 運行 `ghidraRun.bat` (Windows)
+   - 運行 `ghidraRun` (Linux/macOS)
 
 2. **創建新專案**
 
@@ -93,41 +108,41 @@ binwalk -e firmware.img
 
 ### 3.1 尋找 main 函數
 
-- **Ghidra**：
+- **Ghidra**
 
   - 在 `Symbol Tree` 視窗展開 `Functions`
   - 尋找 `main` 或 `entry` 函數
 
-- **IDA Pro**：
+- **IDA Pro**
   - 在 `Functions window` 尋找 `main`
   - 檢查程序入口點
 
 ### 3.2 尋找字串
 
-- **strings 工具**：
+- **strings 工具**
 
   ```bash
   strings -n 7 firmware.bin | less
   strings -t x firmware.bin
   ```
 
-- **Ghidra**：
+- **Ghidra**
 
   - 打開 `Window -> Defined Strings`
   - 使用 `Search -> For String...`
 
-- **IDA Pro**：
+- **IDA Pro**
   - 打開 `Strings window`
   - 查看識別的字串
 
 ### 3.3 尋找 libc 呼叫
 
-- **Ghidra**：
+- **Ghidra**
 
   - 尋找常見 libc 函數呼叫
   - 檢查 `External Symbols` 目錄
 
-- **IDA Pro**：
+- **IDA Pro**
   - 查看 `Imports` 視窗
   - 分析函數參數和返回值
 

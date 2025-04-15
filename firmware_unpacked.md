@@ -110,10 +110,13 @@ binwalk -e firmware.chk
 
 ```mermaid
 flowchart TD
-    A[Input File (.img/.chk/.bin)] --> B(binwalk)
-    B --> C{Extracted FS (_firmware.extracted)}
-    C --> D[手動分析 (檢視檔案結構與內容)]
-    C --> E[YARA 掃描 (惡意程式碼特徵)]
+    A[Input File\n.img/.chk/.bin] --> B[binwalk]
+    B --> C{Extracted FS\n_firmware.extracted}
+    C --> D[手動分析\n檢視檔案結構與內容]
+    C --> E[YARA 掃描\n惡意程式碼特徵]
+    D --> F[分析結果]
+    E --> F
+    F --> G[報告生成]
 ```
 
 ## 5. 韌體來源與類型
@@ -234,12 +237,3 @@ hexdump 命令以十六進制或其他格式顯示檔案的原始二進制資料
 # 以規範的十六進制和 ASCII 格式顯示檔案內容
 hexdump -C firmware.bin | less
 ```
-
-## 7. 分析工具整合
-
-透過結合使用 binwalk、strings 和 hexdump，安全研究人員可以：
-
-- 有效地分析韌體
-- 識別潛在的漏洞
-- 檢測惡意程式碼
-- 發現不安全的配置

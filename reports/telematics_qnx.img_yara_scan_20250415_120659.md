@@ -1,6 +1,6 @@
 # YARA 掃描報告
 ## 掃描對象: telematics_qnx.img
-## 掃描時間: Tue Apr 15 11:08:47 CST 2025
+## 掃描時間: Tue Apr 15 12:06:59 CST 2025
 
 ### 規則: detect_autosar_stack.yar
 ```

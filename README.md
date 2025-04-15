@@ -2,11 +2,11 @@
 
 A practical research lab focused on analyzing embedded firmware used in modern automotive systems. This project documents static analysis techniques, firmware unpacking, component detection using YARA rules, and CAN Bus log simulation — all geared toward enhancing automotive cybersecurity.
 
-## Demo
+## Demo video:
 
 [![Watch the demo video](https://img.youtube.com/vi/rHVcB-mxKB8/0.jpg)](https://www.youtube.com/watch?v=rHVcB-mxKB8)
 
-點擊圖片觀看示範影片
+點擊上方影像觀看示範影片
 
 ## 🔧 快速開始
 

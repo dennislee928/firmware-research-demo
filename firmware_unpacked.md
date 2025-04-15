@@ -26,18 +26,18 @@ binwalk -e firmware.bin
 
 ### 1.3 支援的檔案格式
 
-- 支援多種韌體檔案格式，包括：
+- **支援多種韌體檔案格式**
 
   - `.img`
   - `.chk`
   - `.bin`
   - 其他常見格式
 
-- 底層使用 libmagic 庫，相容 Unix file 工具的 magic 簽名
+- **底層技術**
+  - 使用 libmagic 庫
+  - 相容 Unix file 工具的 magic 簽名
 
 ## 2. 解包指令範例
-
-假設我們有一個名為 `firmware.chk` 的韌體檔案，我們想要使用 binwalk 進行解包：
 
 ### 2.1 掃描韌體
 

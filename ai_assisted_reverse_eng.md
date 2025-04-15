@@ -23,37 +23,11 @@ AI 的導入可以帶來以下價值：
 ## 3. AI 在韌體分析流程中的應用階段
 
 ```mermaid
-mindmap
-  root((AI 輔助韌體分析流程))
-    Data Collection
-      韌體映像檔收集
-      惡意軟體樣本庫
-      公開漏洞資訊
-    Preprocessing
-      反組譯
-        Disassembly
-      控制流圖
-        Control Flow Graph
-      字串與符號提取
-      特徵工程
-        Byte Sequence 特徵
-        程式碼結構特徵
-        API 調用特徵
-    Model Training
-      Byte Sequence 分類模型
-      函式命名與功能識別
-      漏洞預測模型
-      惡意軟體家族分類
-    Labeling
-      自動化模組標識
-      自動化函式命名
-      自動化註解
-      潛在漏洞標記
-      惡意軟體家族標籤
-    Analysis & Reporting
-      AI 輔助漏洞分析
-      自動化報告生成
-      威脅情報增強
+flowchart TD
+    A[firmware folder] --> B[script.py]
+    B --> C{YARA rules}
+    C --> D[match report]
+    D --> E[print risk level]
 ```
 
 ## 4. 研究與實例引用

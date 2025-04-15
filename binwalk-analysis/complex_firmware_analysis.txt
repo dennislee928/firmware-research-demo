@@ -1,1 +1,0 @@
-Analyzed 1 file for 85 file signatures (187 magic patterns) in 6.0 milliseconds

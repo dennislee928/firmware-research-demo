@@ -1,0 +1,22 @@
+name = "twse-trading-stats"
+main = "cron-get.js"
+compatibility_date = "2024-04-16"
+
+# 設定 D1 資料庫
+[[d1_databases]]
+binding = "DB"
+database_name = "trading_stats"
+database_id = "your-d1-database-id"
+
+# 設定 KV 命名空間
+kv_namespaces = [
+  { binding = "TRADING_STATS", id = "your-kv-namespace-id" }
+]
+
+# 設定定時任務
+[triggers]
+crons = ["* * * * *"]  # 每分鐘執行一次
+
+# 設定環境變數
+[vars]
+API_URL = "https://openapi.twse.com.tw/v1/statistics/electronic_trading" 

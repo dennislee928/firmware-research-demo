@@ -1,1 +1,0 @@
-Detect_Network_Services /Users/lipeichen/Documents/twister5.com.tw/firmware-research-demo/firmware.bin

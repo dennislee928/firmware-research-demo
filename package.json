@@ -1,0 +1,17 @@
+{
+  "name": "twse-trading-stats",
+  "version": "1.0.0",
+  "description": "臺灣證券交易所電子式交易統計資訊獲取服務",
+  "main": "cron-get.js",
+  "scripts": {
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@cloudflare/workers-types": "^4.20250408.0"
+  },
+  "devDependencies": {
+    "wrangler": "^3.109.1"
+  }
+}

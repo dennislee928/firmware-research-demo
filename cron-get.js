@@ -85,15 +85,25 @@ async function fetchTradingStats(db) {
 
     // 檢查是否為有效的 JSON
     try {
-      const data = JSON.parse(responseText);
+      const dataArray = JSON.parse(responseText);
       const timestamp = new Date().toISOString();
 
       // 檢查資料結構
-      if (!data || typeof data !== "object") {
-        throw new Error("API 回應格式不正確");
+      if (!Array.isArray(dataArray)) {
+        console.log("API 回應不是陣列:", dataArray);
+        throw new Error("API 回應格式不正確: 預期陣列但接收到其他格式");
       }
 
-      console.log("API 回應資料:", data);
+      if (dataArray.length === 0) {
+        console.log("API 回應陣列為空");
+        throw new Error("API 回應陣列為空");
+      }
+
+      console.log("API 回應資料:", dataArray);
+
+      // 取得陣列中的第一個元素作為資料
+      const data = dataArray[0];
+      console.log("處理資料項目:", data);
 
       // 儲存到 D1 資料庫 - 修改為單行 SQL
       const stmt = db.prepare(
@@ -116,12 +126,12 @@ async function fetchTradingStats(db) {
           data.平均每筆成交金額 || "",
           data.公司總成交筆數 || "",
           data.公司總成交金額 || "",
-          data.占公司成交比率筆數 || "",
-          data.占公司成交比率金額 || "",
-          data.市場成交總筆數 || "",
-          data.市場成交總金額 || "",
-          data.占市場成交比率筆數 || "",
-          data.占市場成交比率金額 || ""
+          data["占公司成交比率(筆數)"] || "",
+          data["占公司成交比率(金額)"] || "",
+          data["市場成交總筆數(買賣合計)"] || "",
+          data["市場成交總金額(買賣合計)"] || "",
+          data["占市場成交比率(筆數)"] || "",
+          data["占市場成交比率(金額)"] || ""
         )
         .run();
 
@@ -129,7 +139,9 @@ async function fetchTradingStats(db) {
       console.log(`成交月份: ${data.成交月份 || "N/A"}`);
       console.log(`本月交易戶數: ${data.本月交易戶數 || "N/A"}`);
       console.log(`成交金額: ${data.成交金額 || "N/A"}`);
-      console.log(`占市場成交比率(金額): ${data.占市場成交比率金額 || "N/A"}`);
+      console.log(
+        `占市場成交比率(金額): ${data["占市場成交比率(金額)"] || "N/A"}`
+      );
 
       return new Response(
         JSON.stringify({

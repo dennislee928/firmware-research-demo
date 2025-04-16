@@ -1,5 +1,5 @@
 // 使用 Cloudflare Workers 的環境變數
-const API_URL = "https://openapi.twse.com.tw/v1/statistics/electronic_trading";
+const API_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap19";
 
 // 初始化資料庫
 async function initDB(db) {
@@ -49,6 +49,9 @@ async function fetchTradingStats(db) {
       headers: {
         Accept: "application/json",
         "User-Agent": "Cloudflare Worker",
+        "If-Modified-Since": "Mon, 26 Jul 1997 05:00:00 GMT",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
       },
     };
 
@@ -76,72 +79,77 @@ async function fetchTradingStats(db) {
     });
     console.log("回應標頭:", headers);
 
-    // 檢查是否為有效的 JSON
-    const isValid = await isValidJSON(response.clone());
-    if (!isValid) {
-      throw new Error("API 回應不是有效的 JSON 格式");
-    }
-
+    // 直接讀取回應內容
     const responseText = await response.text();
-    console.log("回應內容:", responseText);
+    console.log("回應內容片段:", responseText.substring(0, 200));
 
-    const data = JSON.parse(responseText);
-    const timestamp = new Date().toISOString();
+    // 檢查是否為有效的 JSON
+    try {
+      const data = JSON.parse(responseText);
+      const timestamp = new Date().toISOString();
 
-    // 檢查資料結構
-    if (!data || typeof data !== "object") {
-      throw new Error("API 回應格式不正確");
-    }
-
-    console.log("API 回應資料:", data);
-
-    // 儲存到 D1 資料庫 - 修改為單行 SQL
-    const stmt = db.prepare(
-      "INSERT INTO trading_stats (timestamp, trading_month, new_accounts, closed_accounts, total_accounts, trading_accounts, trading_users, order_count, order_amount, trade_count, trade_amount, avg_trade_amount, company_trade_count, company_trade_amount, company_trade_ratio_count, company_trade_ratio_amount, market_trade_count, market_trade_amount, market_trade_ratio_count, market_trade_ratio_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    );
-
-    await stmt
-      .bind(
-        timestamp,
-        data.成交月份 || "",
-        data.本月新增戶數 || "",
-        data.本月註銷戶數 || "",
-        data.累計開戶數 || "",
-        data.本月交易戶數 || "",
-        data.本月交易人數 || "",
-        data.委託筆數 || "",
-        data.委託金額 || "",
-        data.成交筆數 || "",
-        data.成交金額 || "",
-        data.平均每筆成交金額 || "",
-        data.公司總成交筆數 || "",
-        data.公司總成交金額 || "",
-        data.占公司成交比率筆數 || "",
-        data.占公司成交比率金額 || "",
-        data.市場成交總筆數 || "",
-        data.市場成交總金額 || "",
-        data.占市場成交比率筆數 || "",
-        data.占市場成交比率金額 || ""
-      )
-      .run();
-
-    // 記錄重要資訊
-    console.log(`成交月份: ${data.成交月份 || "N/A"}`);
-    console.log(`本月交易戶數: ${data.本月交易戶數 || "N/A"}`);
-    console.log(`成交金額: ${data.成交金額 || "N/A"}`);
-    console.log(`占市場成交比率(金額): ${data.占市場成交比率金額 || "N/A"}`);
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: "資料獲取成功",
-        timestamp: timestamp,
-        data: data,
-      }),
-      {
-        headers: { "Content-Type": "application/json" },
+      // 檢查資料結構
+      if (!data || typeof data !== "object") {
+        throw new Error("API 回應格式不正確");
       }
-    );
+
+      console.log("API 回應資料:", data);
+
+      // 儲存到 D1 資料庫 - 修改為單行 SQL
+      const stmt = db.prepare(
+        "INSERT INTO trading_stats (timestamp, trading_month, new_accounts, closed_accounts, total_accounts, trading_accounts, trading_users, order_count, order_amount, trade_count, trade_amount, avg_trade_amount, company_trade_count, company_trade_amount, company_trade_ratio_count, company_trade_ratio_amount, market_trade_count, market_trade_amount, market_trade_ratio_count, market_trade_ratio_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      );
+
+      await stmt
+        .bind(
+          timestamp,
+          data.成交月份 || "",
+          data.本月新增戶數 || "",
+          data.本月註銷戶數 || "",
+          data.累計開戶數 || "",
+          data.本月交易戶數 || "",
+          data.本月交易人數 || "",
+          data.委託筆數 || "",
+          data.委託金額 || "",
+          data.成交筆數 || "",
+          data.成交金額 || "",
+          data.平均每筆成交金額 || "",
+          data.公司總成交筆數 || "",
+          data.公司總成交金額 || "",
+          data.占公司成交比率筆數 || "",
+          data.占公司成交比率金額 || "",
+          data.市場成交總筆數 || "",
+          data.市場成交總金額 || "",
+          data.占市場成交比率筆數 || "",
+          data.占市場成交比率金額 || ""
+        )
+        .run();
+
+      // 記錄重要資訊
+      console.log(`成交月份: ${data.成交月份 || "N/A"}`);
+      console.log(`本月交易戶數: ${data.本月交易戶數 || "N/A"}`);
+      console.log(`成交金額: ${data.成交金額 || "N/A"}`);
+      console.log(`占市場成交比率(金額): ${data.占市場成交比率金額 || "N/A"}`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "資料獲取成功",
+          timestamp: timestamp,
+          data: data,
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    } catch (jsonError) {
+      console.error("解析 JSON 失敗:", jsonError.message);
+      throw new Error(
+        `解析 JSON 失敗: ${
+          jsonError.message
+        }, 回應內容: ${responseText.substring(0, 100)}`
+      );
+    }
   } catch (error) {
     console.error(`獲取資料失敗: ${error.message}`);
     console.error(`錯誤堆疊: ${error.stack}`);

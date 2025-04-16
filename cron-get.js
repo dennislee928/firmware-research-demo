@@ -3,32 +3,9 @@ const API_URL = "https://openapi.twse.com.tw/v1/statistics/electronic_trading";
 
 // 初始化資料庫
 async function initDB(db) {
-  await db.exec(`
-        CREATE TABLE IF NOT EXISTS trading_stats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL,
-            trading_month TEXT,
-            new_accounts TEXT,
-            closed_accounts TEXT,
-            total_accounts TEXT,
-            trading_accounts TEXT,
-            trading_users TEXT,
-            order_count TEXT,
-            order_amount TEXT,
-            trade_count TEXT,
-            trade_amount TEXT,
-            avg_trade_amount TEXT,
-            company_trade_count TEXT,
-            company_trade_amount TEXT,
-            company_trade_ratio_count TEXT,
-            company_trade_ratio_amount TEXT,
-            market_trade_count TEXT,
-            market_trade_amount TEXT,
-            market_trade_ratio_count TEXT,
-            market_trade_ratio_amount TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
+  await db.exec(
+    "CREATE TABLE IF NOT EXISTS trading_stats (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT NOT NULL, trading_month TEXT, new_accounts TEXT, closed_accounts TEXT, total_accounts TEXT, trading_accounts TEXT, trading_users TEXT, order_count TEXT, order_amount TEXT, trade_count TEXT, trade_amount TEXT, avg_trade_amount TEXT, company_trade_count TEXT, company_trade_amount TEXT, company_trade_ratio_count TEXT, company_trade_ratio_amount TEXT, market_trade_count TEXT, market_trade_amount TEXT, market_trade_ratio_count TEXT, market_trade_ratio_amount TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)"
+  );
 }
 
 // 獲取交易統計資料的函數
@@ -41,19 +18,11 @@ async function fetchTradingStats(db) {
     const timestamp = new Date().toISOString();
 
     // 儲存到 D1 資料庫
-    await db
-      .prepare(
-        `
-            INSERT INTO trading_stats (
-                timestamp, trading_month, new_accounts, closed_accounts,
-                total_accounts, trading_accounts, trading_users, order_count,
-                order_amount, trade_count, trade_amount, avg_trade_amount,
-                company_trade_count, company_trade_amount, company_trade_ratio_count,
-                company_trade_ratio_amount, market_trade_count, market_trade_amount,
-                market_trade_ratio_count, market_trade_ratio_amount
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      )
+    const stmt = db.prepare(
+      "INSERT INTO trading_stats (timestamp, trading_month, new_accounts, closed_accounts, total_accounts, trading_accounts, trading_users, order_count, order_amount, trade_count, trade_amount, avg_trade_amount, company_trade_count, company_trade_amount, company_trade_ratio_count, company_trade_ratio_amount, market_trade_count, market_trade_amount, market_trade_ratio_count, market_trade_ratio_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+
+    await stmt
       .bind(
         timestamp,
         data.成交月份,
@@ -112,24 +81,43 @@ async function fetchTradingStats(db) {
 // 處理 HTTP 請求
 export default {
   async fetch(request, env) {
-    // 初始化資料庫
-    await initDB(env.DB);
+    try {
+      // 初始化資料庫
+      await initDB(env.DB);
 
-    // 只允許 POST 請求
-    if (request.method !== "POST") {
-      return new Response("Method not allowed", { status: 405 });
+      // 允許 GET 和 POST 請求
+      if (request.method !== "POST" && request.method !== "GET") {
+        return new Response("Method not allowed", { status: 405 });
+      }
+
+      // 執行獲取資料的任務
+      return await fetchTradingStats(env.DB);
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: error.message,
+          stack: error.stack,
+        }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
-
-    // 執行獲取資料的任務
-    return await fetchTradingStats(env.DB);
   },
 
   // 設定定時任務
   async scheduled(event, env) {
-    // 初始化資料庫
-    await initDB(env.DB);
+    try {
+      // 初始化資料庫
+      await initDB(env.DB);
 
-    // 執行獲取資料的任務
-    await fetchTradingStats(env.DB);
+      // 執行獲取資料的任務
+      await fetchTradingStats(env.DB);
+    } catch (error) {
+      console.error(`排程任務錯誤: ${error.message}`);
+      console.error(error.stack);
+    }
   },
 };

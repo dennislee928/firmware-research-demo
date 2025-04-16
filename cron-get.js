@@ -1,6 +1,10 @@
 // 使用 Cloudflare Workers 的環境變數
 const API_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap19";
 
+// 追蹤最後一次執行時間
+let lastExecutionTime = 0;
+const EXECUTION_INTERVAL = 10000; // 10秒
+
 // 初始化資料庫
 async function initDB(db) {
   // 修正 SQL 語句，放在單行中
@@ -179,9 +183,46 @@ async function fetchTradingStats(db) {
   }
 }
 
+// 每10秒執行一次的函數
+async function executeEvery10Seconds(env, ctx) {
+  const now = Date.now();
+
+  // 檢查距離上次執行的時間，如果超過10秒，則執行
+  if (now - lastExecutionTime >= EXECUTION_INTERVAL) {
+    console.log("執行排程任務 (每10秒)...");
+    lastExecutionTime = now;
+
+    try {
+      // 初始化資料庫
+      await initDB(env.DB);
+
+      // 執行獲取資料的任務
+      await fetchTradingStats(env.DB);
+    } catch (error) {
+      console.error(`排程任務錯誤: ${error.message}`);
+      console.error(error.stack);
+    }
+  }
+
+  // 設定下一次執行
+  // 計算下一次執行時間，確保每10秒執行一次
+  const nextExecutionTime = Math.max(
+    1,
+    EXECUTION_INTERVAL - (Date.now() - lastExecutionTime)
+  );
+  ctx.waitUntil(
+    new Promise((resolve) =>
+      setTimeout(() => {
+        executeEvery10Seconds(env, ctx);
+        resolve();
+      }, nextExecutionTime)
+    )
+  );
+}
+
 // 處理 HTTP 請求
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
       // 解析請求 URL
       const url = new URL(request.url);
@@ -189,6 +230,25 @@ export default {
 
       // 初始化資料庫
       await initDB(env.DB);
+
+      // 啟動10秒執行一次的定時器（僅在路徑為 /start10s 時執行）
+      if (path === "/start10s") {
+        // 避免重複啟動
+        if (Date.now() - lastExecutionTime > EXECUTION_INTERVAL) {
+          lastExecutionTime = Date.now();
+          ctx.waitUntil(executeEvery10Seconds(env, ctx));
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: "已啟動每10秒執行一次的自動任務",
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
 
       // 路由處理
       if (path === "/fetch") {
@@ -239,6 +299,7 @@ export default {
             
             <button class="btn" onclick="fetchData()">立即獲取資料</button>
             <button class="btn" onclick="checkData()">查詢最近資料</button>
+            <button class="btn" onclick="start10sTask()" style="background: #2196F3;">啟動10秒自動任務</button>
             
             <div id="result"></div>
             
@@ -262,6 +323,19 @@ export default {
                 
                 try {
                   const response = await fetch('/check');
+                  const data = await response.json();
+                  resultElement.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                } catch (error) {
+                  resultElement.innerHTML = '<pre>錯誤: ' + error.message + '</pre>';
+                }
+              }
+              
+              async function start10sTask() {
+                const resultElement = document.getElementById('result');
+                resultElement.innerHTML = '啟動中，請稍候...';
+                
+                try {
+                  const response = await fetch('/start10s');
                   const data = await response.json();
                   resultElement.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
                 } catch (error) {
@@ -296,13 +370,19 @@ export default {
   },
 
   // 設定定時任務
-  async scheduled(event, env) {
+  async scheduled(event, env, ctx) {
     try {
       // 初始化資料庫
       await initDB(env.DB);
 
       // 執行獲取資料的任務
       await fetchTradingStats(env.DB);
+
+      // 重設最後執行時間，以便下次10秒執行
+      lastExecutionTime = Date.now();
+
+      // 啟動10秒執行一次的定時器
+      ctx.waitUntil(executeEvery10Seconds(env, ctx));
     } catch (error) {
       console.error(`排程任務錯誤: ${error.message}`);
       console.error(error.stack);

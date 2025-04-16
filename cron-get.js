@@ -183,16 +183,103 @@ async function fetchTradingStats(db) {
 export default {
   async fetch(request, env) {
     try {
+      // 解析請求 URL
+      const url = new URL(request.url);
+      const path = url.pathname;
+
       // 初始化資料庫
       await initDB(env.DB);
 
-      // 允許 GET 和 POST 請求
-      if (request.method !== "POST" && request.method !== "GET") {
-        return new Response("Method not allowed", { status: 405 });
+      // 路由處理
+      if (path === "/fetch") {
+        // 手動觸發資料獲取
+        return await fetchTradingStats(env.DB);
+      } else if (path === "/check") {
+        // 查詢最近的資料
+        const result = await env.DB.prepare(
+          "SELECT * FROM trading_stats ORDER BY id DESC LIMIT 5"
+        ).all();
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: "查詢最近資料成功",
+            data: result.results,
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      } else if (path === "/") {
+        // 簡單的 HTML 首頁，提供手動操作按鈕
+        return new Response(
+          `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>TWSE 交易統計資料獲取器</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 0; padding: 20px; line-height: 1.6; }
+              h1 { color: #333; }
+              .btn { 
+                display: inline-block; padding: 10px 15px; 
+                background: #4CAF50; color: white; border: none; 
+                cursor: pointer; margin-right: 10px; border-radius: 4px;
+                text-decoration: none;
+              }
+              .btn:hover { background: #45a049; }
+              pre { background: #f4f4f4; padding: 10px; border-radius: 4px; overflow: auto; }
+              #result { margin-top: 20px; }
+            </style>
+          </head>
+          <body>
+            <h1>TWSE 交易統計資料獲取器</h1>
+            <p>使用下方按鈕手動觸發資料獲取或查詢資料庫中的數據。</p>
+            
+            <button class="btn" onclick="fetchData()">立即獲取資料</button>
+            <button class="btn" onclick="checkData()">查詢最近資料</button>
+            
+            <div id="result"></div>
+            
+            <script>
+              async function fetchData() {
+                const resultElement = document.getElementById('result');
+                resultElement.innerHTML = '處理中，請稍候...';
+                
+                try {
+                  const response = await fetch('/fetch');
+                  const data = await response.json();
+                  resultElement.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                } catch (error) {
+                  resultElement.innerHTML = '<pre>錯誤: ' + error.message + '</pre>';
+                }
+              }
+              
+              async function checkData() {
+                const resultElement = document.getElementById('result');
+                resultElement.innerHTML = '處理中，請稍候...';
+                
+                try {
+                  const response = await fetch('/check');
+                  const data = await response.json();
+                  resultElement.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                } catch (error) {
+                  resultElement.innerHTML = '<pre>錯誤: ' + error.message + '</pre>';
+                }
+              }
+            </script>
+          </body>
+          </html>
+        `,
+          {
+            headers: { "Content-Type": "text/html; charset=utf-8" },
+          }
+        );
+      } else {
+        // 404 錯誤
+        return new Response("找不到頁面", { status: 404 });
       }
-
-      // 執行獲取資料的任務
-      return await fetchTradingStats(env.DB);
     } catch (error) {
       return new Response(
         JSON.stringify({

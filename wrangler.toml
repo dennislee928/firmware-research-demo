@@ -16,3 +16,8 @@ crons = ["* * * * *"]  # 每分鐘執行一次
 # 設定環境變數
 [vars]
 API_URL = "https://openapi.twse.com.tw/v1/statistics/electronic_trading" 
+
+# wrangler.toml (wrangler v3.88.0^)
+[observability.logs]
+enabled = true
+

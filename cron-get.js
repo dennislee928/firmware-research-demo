@@ -1,83 +1,34 @@
-const cron = require("node-cron");
-const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
-const moment = require("moment");
-
-// 設定日誌目錄
-const logDir = path.join(__dirname, "logs");
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir);
-}
-
-// 設定資料儲存目錄
-const dataDir = path.join(__dirname, "data");
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir);
-}
-
 // 使用 Cloudflare Workers 的環境變數
 const API_URL = "https://openapi.twse.com.tw/v1/statistics/electronic_trading";
-const KV_NAMESPACE = "TRADING_STATS"; // 在 Cloudflare Workers 中設定的 KV 命名空間
-
-// 記錄日誌的函數
-function logMessage(message) {
-  const timestamp = moment().format("YYYY-MM-DD HH:mm:ss");
-  const logMessage = `[${timestamp}] ${message}\n`;
-  const logFile = path.join(
-    logDir,
-    `trading_stats_${moment().format("YYYY-MM-DD")}.log`
-  );
-
-  fs.appendFile(logFile, logMessage, (err) => {
-    if (err) console.error("寫入日誌失敗:", err);
-  });
-
-  console.log(logMessage);
-}
-
-// 儲存資料的函數
-async function saveData(data) {
-  try {
-    const timestamp = moment().format("YYYY-MM-DD_HH-mm-ss");
-    const fileName = `trading_stats_${timestamp}.json`;
-    const filePath = path.join(dataDir, fileName);
-
-    await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2));
-    logMessage(`資料已儲存至: ${fileName}`);
-  } catch (error) {
-    logMessage(`儲存資料失敗: ${error.message}`);
-  }
-}
 
 // 初始化資料庫
 async function initDB(db) {
   await db.exec(`
-    CREATE TABLE IF NOT EXISTS trading_stats (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      timestamp TEXT NOT NULL,
-      trading_month TEXT,
-      new_accounts TEXT,
-      closed_accounts TEXT,
-      total_accounts TEXT,
-      trading_accounts TEXT,
-      trading_users TEXT,
-      order_count TEXT,
-      order_amount TEXT,
-      trade_count TEXT,
-      trade_amount TEXT,
-      avg_trade_amount TEXT,
-      company_trade_count TEXT,
-      company_trade_amount TEXT,
-      company_trade_ratio_count TEXT,
-      company_trade_ratio_amount TEXT,
-      market_trade_count TEXT,
-      market_trade_amount TEXT,
-      market_trade_ratio_count TEXT,
-      market_trade_ratio_amount TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
+        CREATE TABLE IF NOT EXISTS trading_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            trading_month TEXT,
+            new_accounts TEXT,
+            closed_accounts TEXT,
+            total_accounts TEXT,
+            trading_accounts TEXT,
+            trading_users TEXT,
+            order_count TEXT,
+            order_amount TEXT,
+            trade_count TEXT,
+            trade_amount TEXT,
+            avg_trade_amount TEXT,
+            company_trade_count TEXT,
+            company_trade_amount TEXT,
+            company_trade_ratio_count TEXT,
+            company_trade_ratio_amount TEXT,
+            market_trade_count TEXT,
+            market_trade_amount TEXT,
+            market_trade_ratio_count TEXT,
+            market_trade_ratio_amount TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
 }
 
 // 獲取交易統計資料的函數
@@ -93,15 +44,15 @@ async function fetchTradingStats(db) {
     await db
       .prepare(
         `
-      INSERT INTO trading_stats (
-        timestamp, trading_month, new_accounts, closed_accounts,
-        total_accounts, trading_accounts, trading_users, order_count,
-        order_amount, trade_count, trade_amount, avg_trade_amount,
-        company_trade_count, company_trade_amount, company_trade_ratio_count,
-        company_trade_ratio_amount, market_trade_count, market_trade_amount,
-        market_trade_ratio_count, market_trade_ratio_amount
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `
+            INSERT INTO trading_stats (
+                timestamp, trading_month, new_accounts, closed_accounts,
+                total_accounts, trading_accounts, trading_users, order_count,
+                order_amount, trade_count, trade_amount, avg_trade_amount,
+                company_trade_count, company_trade_amount, company_trade_ratio_count,
+                company_trade_ratio_amount, market_trade_count, market_trade_amount,
+                market_trade_ratio_count, market_trade_ratio_amount
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `
       )
       .bind(
         timestamp,
@@ -131,7 +82,7 @@ async function fetchTradingStats(db) {
     console.log(`成交月份: ${data.成交月份}`);
     console.log(`本月交易戶數: ${data.本月交易戶數}`);
     console.log(`成交金額: ${data.成交金額}`);
-    console.log(`占市場成交比率(金額): ${data.占市場成交比率(金額)}`);
+    console.log(`占市場成交比率(金額): ${data.占市場成交比率金額}`);
 
     return new Response(
       JSON.stringify({
@@ -174,7 +125,7 @@ export default {
   },
 
   // 設定定時任務
-  async scheduled(event, env, ctx) {
+  async scheduled(event, env) {
     // 初始化資料庫
     await initDB(env.DB);
 
@@ -182,10 +133,3 @@ export default {
     await fetchTradingStats(env.DB);
   },
 };
-
-// 設定 cron 任務，每分鐘執行一次
-cron.schedule("* * * * *", () => {
-  fetchTradingStats();
-});
-
-logMessage("電子式交易統計資訊獲取服務已啟動");

@@ -23,7 +23,7 @@ services:
       - NODE_ENV=production
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "curl", "-f", "http://0.0.0.0:3000"]
       interval: 1m
       timeout: 10s
       retries: 3

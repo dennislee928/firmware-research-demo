@@ -43,6 +43,9 @@ export default async function handler(req, res) {
     const jobId = Date.now().toString();
     const { fields, files } = await readFormData(req);
     
+    console.log(`[Job ${jobId}] Received fields:`, JSON.stringify(fields));
+    console.log(`[Job ${jobId}] Received files keys:`, Object.keys(files));
+    
     let targetPath = "";
     const args = [];
 
@@ -50,7 +53,7 @@ export default async function handler(req, res) {
       const firmware = Array.isArray(files.firmware) ? files.firmware[0] : files.firmware;
       targetPath = firmware.filepath;
       
-      const allowedExtensions = [".bin", ".img", ".fw", ".pkg", ".dmg"];
+      const allowedExtensions = [".bin", ".img", ".fw", ".pkg", ".dmg", ".iso", ".zip", ".7z", ".tar", ".gz"];
       const fileExtension = path.extname(firmware.originalFilename || "").toLowerCase();
 
       if (!allowedExtensions.includes(fileExtension) && fileExtension !== "") {

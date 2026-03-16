@@ -173,6 +173,7 @@ initialize_directories() {
   mkdir -p "$WORK_DIR/hexdump-analysis"
   mkdir -p "$WORK_DIR/yara-rules"
   mkdir -p "$WORK_DIR/screenshots/ghidra"
+  mkdir -p "$WORK_DIR/preprocessed"
   mkdir -p "$LOG_DIR"
   mkdir -p "$REPORT_DIR"
   mkdir -p "$FIRMWARE_SAMPLES"
@@ -520,6 +521,47 @@ check_directory_structure() {
   fi
 }
 
+# 預處理複雜檔案格式
+preprocess_file() {
+  local input_file="$1"
+  local ext="${input_file##*.}"
+  local base_name=$(basename "$input_file")
+  local out_dir="$WORK_DIR/preprocessed/${base_name}_extracted"
+  
+  log "INFO" "預處理檔案: $input_file (格式: $ext)"
+  
+  case "${ext,,}" in
+    dmg)
+      if check_command "dmg2img"; then
+        log "INFO" "轉換 DMG 為 IMG..."
+        dmg2img "$input_file" "$WORK_DIR/preprocessed/${base_name}.img"
+        # 更新分析目標為轉換後的 IMG
+        FIRMWARE_FILE="$WORK_DIR/preprocessed/${base_name}.img"
+      fi
+      ;;
+    iso)
+      log "INFO" "提取 ISO 內容..."
+      mkdir -p "$out_dir"
+      7z x "$input_file" "-o$out_dir" -y > /dev/null
+      log "SUCCESS" "ISO 已提取至 $out_dir"
+      ;;
+    pkg)
+      if check_command "xar"; then
+        log "INFO" "擴展 PKG 封裝..."
+        mkdir -p "$out_dir"
+        xar -xf "$input_file" -C "$out_dir"
+        log "SUCCESS" "PKG 已擴展至 $out_dir"
+      fi
+      ;;
+    zip|7z|tar|gz|xz)
+      log "INFO" "解壓縮檔案..."
+      mkdir -p "$out_dir"
+      7z x "$input_file" "-o$out_dir" -y > /dev/null
+      log "SUCCESS" "檔案已解壓至 $out_dir"
+      ;;
+  esac
+}
+
 # 分析單個檔案
 analyze_single_file() {
   local file_path="$1"
@@ -528,8 +570,12 @@ analyze_single_file() {
   # 更新全局變數
   FIRMWARE_FILE="$file_path"
   FIRMWARE_NAME=$(basename "$file_path")
+  DATE_TAG="$(date "+%Y%m%d_%H%M%S")"
   LOG_FILE="$LOG_DIR/analysis_${FIRMWARE_NAME}_$DATE_TAG.log"
   REPORT_FILE="$REPORT_DIR/report_${FIRMWARE_NAME}_$DATE_TAG.md"
+  
+  # 執行預處理
+  preprocess_file "$FIRMWARE_FILE"
   
   # 根據選項執行不同的分析
   if [ $YARA_ONLY -eq 1 ]; then

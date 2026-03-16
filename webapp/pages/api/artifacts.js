@@ -15,14 +15,28 @@ export default function handler(req, res) {
       const results = {};
       for (const f of ALLOWED_FOLDERS) {
         const dirPath = path.join(BASE_DIR, f);
-        if (fs.existsSync(dirPath)) {
-          results[f] = fs.readdirSync(dirPath)
-            .filter(file => !file.startsWith(".") && file !== "empty.yar")
-            .map(file => {
-               const stats = fs.statSync(path.join(dirPath, file));
-               return { name: file, size: stats.size, mtime: stats.mtime };
-            })
-            .sort((a, b) => b.mtime - a.mtime);
+        try {
+          if (fs.existsSync(dirPath)) {
+            const stats = fs.statSync(dirPath);
+            if (stats.isDirectory()) {
+              results[f] = fs.readdirSync(dirPath)
+                .filter(file => !file.startsWith(".") && file !== "empty.yar")
+                .map(file => {
+                   try {
+                     const filePath = path.join(dirPath, file);
+                     const fstats = fs.statSync(filePath);
+                     return { name: file, size: fstats.size, mtime: fstats.mtime };
+                   } catch (e) {
+                     console.error(`Error stating file ${file} in ${f}:`, e.message);
+                     return null;
+                   }
+                })
+                .filter(item => item !== null)
+                .sort((a, b) => b.mtime - a.mtime);
+            }
+          }
+        } catch (e) {
+          console.error(`Error processing directory ${f}:`, e.message);
         }
       }
       return res.status(200).json(results);

@@ -33,6 +33,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     xxd \
     dmg2img \
+    p7zip-full \
+    xar \
+    genisoimage \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js (needed for running the app, but we used slim for builder)
@@ -71,12 +74,12 @@ RUN echo '#!/bin/bash\n\
 # Start cron in background\n\
 service cron start\n\
 \n\
-# Start Next.js app\n\
+echo "Starting Next.js app on port 3000..."\n\
 cd /firmware-analysis/webapp\n\
-npm run start &\n\
-\n\
-# Keep container alive\n\
-tail -f /dev/null' > /firmware-analysis/start.sh && \
+# Use exec to make npm the primary process for better signal handling\n\
+export PORT=3000\n\
+export HOSTNAME=0.0.0.0\n\
+exec npm run start' > /firmware-analysis/start.sh && \
     chmod +x /firmware-analysis/start.sh
 
 # Create dummy firmware if not exists

@@ -36,6 +36,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     p7zip-full \
     xar \
     genisoimage \
+    msitools \
+    osslsigncode \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js (needed for running the app, but we used slim for builder)
@@ -48,7 +50,8 @@ RUN pip3 install --no-cache-dir \
     pyyaml \
     colorlog \
     requests \
-    python-magic
+    python-magic \
+    pefile
 
 # Create directory structure
 RUN mkdir -p /firmware-analysis/binwalk-analysis \

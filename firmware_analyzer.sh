@@ -521,6 +521,9 @@ check_directory_structure() {
   fi
 }
 
+# 全局掃描目標（檔案或目錄）
+SCAN_TARGET=""
+
 # 預處理複雜檔案格式
 preprocess_file() {
   local input_file="$1"
@@ -528,6 +531,7 @@ preprocess_file() {
   local base_name=$(basename "$input_file")
   local out_dir="$WORK_DIR/preprocessed/${base_name}_extracted"
   
+  SCAN_TARGET="$input_file"
   log "INFO" "預處理檔案: $input_file (格式: $ext)"
   
   case "${ext,,}" in
@@ -535,31 +539,82 @@ preprocess_file() {
       if check_command "dmg2img"; then
         log "INFO" "轉換 DMG 為 IMG..."
         dmg2img "$input_file" "$WORK_DIR/preprocessed/${base_name}.img"
-        # 更新分析目標為轉換後的 IMG
-        FIRMWARE_FILE="$WORK_DIR/preprocessed/${base_name}.img"
+        SCAN_TARGET="$WORK_DIR/preprocessed/${base_name}.img"
+        verify_signature "$input_file"
       fi
       ;;
     iso)
       log "INFO" "提取 ISO 內容..."
       mkdir -p "$out_dir"
       7z x "$input_file" "-o$out_dir" -y > /dev/null
-      log "SUCCESS" "ISO 已提取至 $out_dir"
+      SCAN_TARGET="$out_dir"
       ;;
     pkg)
       if check_command "xar"; then
         log "INFO" "擴展 PKG 封裝..."
         mkdir -p "$out_dir"
         xar -xf "$input_file" -C "$out_dir"
-        log "SUCCESS" "PKG 已擴展至 $out_dir"
+        SCAN_TARGET="$out_dir"
+        verify_signature "$input_file"
+      fi
+      ;;
+    exe)
+      log "INFO" "嘗試提取 Windows 執行檔內容..."
+      mkdir -p "$out_dir"
+      7z x "$input_file" "-o$out_dir" -y > /dev/null && SCAN_TARGET="$out_dir"
+      verify_signature "$input_file"
+      check_pe_security "$input_file"
+      ;;
+    msi)
+      if check_command "msiextract"; then
+        log "INFO" "提取 MSI 安裝包內容..."
+        mkdir -p "$out_dir"
+        msiextract "$input_file" -C "$out_dir"
+        SCAN_TARGET="$out_dir"
+        verify_signature "$input_file"
       fi
       ;;
     zip|7z|tar|gz|xz)
       log "INFO" "解壓縮檔案..."
       mkdir -p "$out_dir"
       7z x "$input_file" "-o$out_dir" -y > /dev/null
-      log "SUCCESS" "檔案已解壓至 $out_dir"
+      SCAN_TARGET="$out_dir"
       ;;
   esac
+}
+
+# 驗證數位簽章
+verify_signature() {
+  local file="$1"
+  local log_file="$LOG_DIR/signature_check_$(basename "$file").txt"
+  log "INFO" "正在驗證數位簽章: $file"
+  
+  if [[ "$file" == *.exe ]] || [[ "$file" == *.msi ]]; then
+    if check_command "osslsigncode"; then
+      osslsigncode verify "$file" > "$log_file" 2>&1
+      if grep -q "Signature verification: ok" "$log_file"; then
+        log "SUCCESS" "數位簽章驗證通過"
+      else
+        log "WARNING" "數位簽章無效或未簽署"
+      fi
+    fi
+  fi
+}
+
+# 檢查 PE 安全特性 (ASLR, DEP 等)
+check_pe_security() {
+  local file="$1"
+  log "INFO" "檢查 PE 安全特性: $file"
+  python3 -c "
+import pefile
+import sys
+try:
+    pe = pefile.PE('$file')
+    print(f'ASLR: {bool(pe.OPTIONAL_HEADER.DllCharacteristics & 0x0040)}')
+    print(f'DEP: {bool(pe.OPTIONAL_HEADER.DllCharacteristics & 0x0100)}')
+except Exception as e:
+    print(f'Error: {e}')
+" > "$LOG_DIR/pe_security_$(basename "$file").txt"
 }
 
 # 分析單個檔案

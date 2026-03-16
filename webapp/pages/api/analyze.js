@@ -53,7 +53,7 @@ export default async function handler(req, res) {
       const firmware = Array.isArray(files.firmware) ? files.firmware[0] : files.firmware;
       targetPath = firmware.filepath;
       
-      const allowedExtensions = [".bin", ".img", ".fw", ".pkg", ".dmg", ".iso", ".zip", ".7z", ".tar", ".gz"];
+      const allowedExtensions = [".bin", ".img", ".fw", ".pkg", ".dmg", ".iso", ".zip", ".7z", ".tar", ".gz", ".exe", ".msi"];
       const fileExtension = path.extname(firmware.originalFilename || "").toLowerCase();
 
       if (!allowedExtensions.includes(fileExtension) && fileExtension !== "") {

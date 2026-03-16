@@ -52,7 +52,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     -f|--file)
-      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+      if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
         TARGET_FILE="$2"
         shift 2
       else
@@ -61,7 +61,7 @@ while [[ $# -gt 0 ]]; do
       fi
       ;;
     -d|--directory)
-      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+      if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
         TARGET_DIR="$2"
         shift 2
       else
@@ -70,7 +70,7 @@ while [[ $# -gt 0 ]]; do
       fi
       ;;
     -e|--extension)
-      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+      if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
         FILE_EXTENSION="$2"
         shift 2
       else
@@ -301,9 +301,9 @@ run_binwalk_analysis() {
   log "INFO" "完成基本binwalk分析"
   
   # 提取文件系統（如果需要）
-  if [ "${EXTRACT_FILESYSTEM:-0}" = "1" ]; then
+  if [ "$EXTRACT_FILESYSTEM" -eq 1 ]; then
     log "INFO" "提取韌體中的文件系統..."
-    binwalk -e "$FIRMWARE_FILE" -C "$binwalk_dir/${base_name}_extracted_$DATE_TAG" || log "WARNING" "無法提取文件系統"
+    binwalk -e "$FIRMWARE_FILE" --run-as=root -C "$binwalk_dir/${base_name}_extracted_$DATE_TAG" || log "WARNING" "無法提取文件系統"
   fi
   
   log "SUCCESS" "binwalk分析完成"

@@ -24,7 +24,8 @@ const readFormData = async (req) => {
     const form = new IncomingForm({
       uploadDir: UPLOAD_DIR,
       keepExtensions: true,
-      maxFileSize: 100 * 1024 * 1024, // 100MB limit
+      maxFileSize: 500 * 1024 * 1024, // 500MB limit per file
+      maxTotalFileSize: 500 * 1024 * 1024, // 500MB total limit
     });
 
     form.parse(req, (err, fields, files) => {
@@ -77,11 +78,22 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: "未提供韌體檔案或掃描目錄" });
     }
 
+    // Helper to get field value regardless of it being a string or array
+    const getFieldValue = (val) => {
+      if (Array.isArray(val)) return val[0];
+      return val;
+    };
+
     // Add options
-    if (fields.yaraOnly === "true") args.push("-y");
-    if (fields.binwalkOnly === "true") args.push("-b");
-    if (fields.extractFilesystem === "true") args.push("-x");
-    if (fields.recursive === "true") args.push("-r");
+    if (getFieldValue(fields.yaraOnly) === "true") args.push("-y");
+    if (getFieldValue(fields.binwalkOnly) === "true") args.push("-b");
+    if (getFieldValue(fields.extractFilesystem) === "true") args.push("-x");
+    if (getFieldValue(fields.recursive) === "true") args.push("-r");
+    
+    const scanDir = getFieldValue(fields.scanDirectory);
+    if (scanDir) {
+       // logic for scan directory...
+    }
 
     const jobFile = path.join(LOG_DIR, `job_${jobId}.json`);
     const jobData = {
@@ -93,6 +105,7 @@ export default async function handler(req, res) {
     };
 
     fs.writeFileSync(jobFile, JSON.stringify(jobData, null, 2));
+    console.log(`[Job ${jobId}] Spawning: ./firmware_analyzer.sh ${args.join(" ")}`);
 
     // Spawn process securely
     const child = spawn("./firmware_analyzer.sh", args, {
@@ -103,18 +116,41 @@ export default async function handler(req, res) {
     let stdout = "";
     let stderr = "";
 
-    child.stdout.on("data", (data) => { stdout += data.toString(); });
-    child.stderr.on("data", (data) => { stderr += data.toString(); });
+    child.stdout.on("data", (data) => { 
+      const chunk = data.toString();
+      stdout += chunk; 
+      process.stdout.write(`[Job ${jobId} STDOUT] ${chunk}`);
+    });
+    
+    child.stderr.on("data", (data) => { 
+      const chunk = data.toString();
+      stderr += chunk; 
+      process.stderr.write(`[Job ${jobId} STDERR] ${chunk}`);
+    });
+
+    child.on("error", (err) => {
+      console.error(`[Job ${jobId}] Spawn error:`, err);
+      const errorJobData = {
+        ...jobData,
+        status: "failed",
+        finishTime: new Date().toISOString(),
+        error: err.message,
+        stdout,
+        stderr
+      };
+      fs.writeFileSync(jobFile, JSON.stringify(errorJobData, null, 2));
+    });
 
     child.on("close", (code) => {
+      console.log(`[Job ${jobId}] Process exited with code ${code}`);
       const status = code === 0 ? "completed" : "failed";
       const finishedJobData = {
         ...jobData,
         status,
         finishTime: new Date().toISOString(),
         exitCode: code,
-        stdout: stdout.slice(-10000), // Keep last 10KB
-        stderr: stderr.slice(-10000),
+        stdout: stdout.slice(-20000), // Keep last 20KB
+        stderr: stderr.slice(-20000),
       };
       fs.writeFileSync(jobFile, JSON.stringify(finishedJobData, null, 2));
     });

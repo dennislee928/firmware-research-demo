@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     binwalk \
     util-linux \
+    bsdextrautils \
     yara \
     python3 \
     python3-pip \

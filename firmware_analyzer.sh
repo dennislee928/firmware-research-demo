@@ -202,22 +202,33 @@ EOF
 
 # 使用hexdump進行分析
 perform_hexdump_analysis() {
-  log "INFO" "步驟1：使用hexdump進行檢查"
+  log "INFO" "步驟1：使用hexdump或xxd進行檢查"
   
   local hexdump_dir="$WORK_DIR/hexdump-analysis"
   local base_name=$(basename "$FIRMWARE_FILE")
   local full_dump="$hexdump_dir/${base_name}_full_dump_$DATE_TAG.txt"
   
-  hexdump -C "$FIRMWARE_FILE" > "$full_dump"
+  # Try hexdump, fallback to xxd
+  if command -v hexdump &> /dev/null; then
+    hexdump -C "$FIRMWARE_FILE" > "$full_dump"
+  elif command -v xxd &> /dev/null; then
+    xxd "$FIRMWARE_FILE" > "$full_dump"
+  else
+    log "ERROR" "找不到 hexdump 或 xxd 工具，跳過此步驟"
+    return 1
+  fi
+  
   log "INFO" "生成完整hexdump: $full_dump"
   
-  grep -n "telnetd" "$full_dump" > "$hexdump_dir/${base_name}_telnetd_pattern_$DATE_TAG.txt" || log "INFO" "未發現telnetd模式"
-  grep -n "dropbear\|shadow" "$full_dump" > "$hexdump_dir/${base_name}_security_patterns_$DATE_TAG.txt" || log "INFO" "未發現dropbear或shadow模式"
-  
-  # 將最新的分析結果建立軟鏈接
-  ln -sf "$full_dump" "$hexdump_dir/full_dump.txt"
-  ln -sf "$hexdump_dir/${base_name}_telnetd_pattern_$DATE_TAG.txt" "$hexdump_dir/telnetd_pattern.txt"
-  ln -sf "$hexdump_dir/${base_name}_security_patterns_$DATE_TAG.txt" "$hexdump_dir/security_patterns.txt"
+  if [ -f "$full_dump" ]; then
+    grep -n "telnetd" "$full_dump" > "$hexdump_dir/${base_name}_telnetd_pattern_$DATE_TAG.txt" || log "INFO" "未發現telnetd模式"
+    grep -n "dropbear\|shadow" "$full_dump" > "$hexdump_dir/${base_name}_security_patterns_$DATE_TAG.txt" || log "INFO" "未發現dropbear或shadow模式"
+    
+    # 將最新的分析結果建立軟鏈接
+    ln -sf "$full_dump" "$hexdump_dir/full_dump.txt"
+    ln -sf "$hexdump_dir/${base_name}_telnetd_pattern_$DATE_TAG.txt" "$hexdump_dir/telnetd_pattern.txt"
+    ln -sf "$hexdump_dir/${base_name}_security_patterns_$DATE_TAG.txt" "$hexdump_dir/security_patterns.txt"
+  fi
   
   log "SUCCESS" "hexdump分析完成"
 }

@@ -1,1 +1,1 @@
-sample-bin-files-fontawesome-webfont.bin_security_patterns_20250414_130537.txt
+/firmware-analysis/hexdump-analysis/pohw04utua2yq2bw5050o2yvw.dmg_security_patterns_20260316_141054.txt

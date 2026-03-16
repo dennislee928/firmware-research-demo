@@ -215,9 +215,9 @@ perform_hexdump_analysis() {
   grep -n "dropbear\|shadow" "$full_dump" > "$hexdump_dir/${base_name}_security_patterns_$DATE_TAG.txt" || log "INFO" "未發現dropbear或shadow模式"
   
   # 將最新的分析結果建立軟鏈接
-  ln -sf "${base_name}_full_dump_$DATE_TAG.txt" "$hexdump_dir/full_dump.txt"
-  ln -sf "${base_name}_telnetd_pattern_$DATE_TAG.txt" "$hexdump_dir/telnetd_pattern.txt"
-  ln -sf "${base_name}_security_patterns_$DATE_TAG.txt" "$hexdump_dir/security_patterns.txt"
+  ln -sf "$full_dump" "$hexdump_dir/full_dump.txt"
+  ln -sf "$hexdump_dir/${base_name}_telnetd_pattern_$DATE_TAG.txt" "$hexdump_dir/telnetd_pattern.txt"
+  ln -sf "$hexdump_dir/${base_name}_security_patterns_$DATE_TAG.txt" "$hexdump_dir/security_patterns.txt"
   
   log "SUCCESS" "hexdump分析完成"
 }
@@ -271,7 +271,7 @@ EOF
 
 # 運行YARA規則
 run_yara_rules() {
-  log "INFO" "步驟3：運行YARA規則"
+  log "INFO" "步驟3：運行YARA規則 (目標: $SCAN_TARGET)"
   
   if ! check_command "yara"; then
     return
@@ -280,15 +280,16 @@ run_yara_rules() {
   local yara_dir="$WORK_DIR/yara-rules"
   local base_name=$(basename "$FIRMWARE_FILE")
   
-  yara -r "$yara_dir/telnetd_rule.yar" "$FIRMWARE_FILE" > "$yara_dir/${base_name}_telnetd_results_$DATE_TAG.txt" 2>/dev/null || log "INFO" "未檢測到telnetd"
-  yara -r "$yara_dir/network_services_rule.yar" "$FIRMWARE_FILE" > "$yara_dir/${base_name}_network_services_results_$DATE_TAG.txt" 2>/dev/null || log "INFO" "未檢測到網絡服務"
+  # 使用 -r 遞迴掃描目錄或單個檔案
+  yara -r "$yara_dir/telnetd_rule.yar" "$SCAN_TARGET" > "$yara_dir/${base_name}_telnetd_results_$DATE_TAG.txt" 2>/dev/null
+  yara -r "$yara_dir/network_services_rule.yar" "$SCAN_TARGET" > "$yara_dir/${base_name}_network_services_results_$DATE_TAG.txt" 2>/dev/null
   
   log "SUCCESS" "YARA規則運行完成"
 }
 
 # 使用binwalk分析
 run_binwalk_analysis() {
-  log "INFO" "步驟4：使用binwalk分析韌體"
+  log "INFO" "步驟4：使用binwalk分析 (目標: $SCAN_TARGET)"
   
   if ! check_command "binwalk"; then
     return
@@ -297,14 +298,17 @@ run_binwalk_analysis() {
   local binwalk_dir="$WORK_DIR/binwalk-analysis"
   local base_name=$(basename "$FIRMWARE_FILE")
   
-  # 基本分析
-  binwalk "$FIRMWARE_FILE" > "$binwalk_dir/${base_name}_binwalk_results_$DATE_TAG.txt" 2>/dev/null
-  log "INFO" "完成基本binwalk分析"
+  # 如果是目錄，則針對目錄中的每個檔案執行
+  if [ -d "$SCAN_TARGET" ]; then
+    binwalk -r "$SCAN_TARGET" > "$binwalk_dir/${base_name}_binwalk_results_$DATE_TAG.txt" 2>/dev/null
+  else
+    binwalk "$SCAN_TARGET" > "$binwalk_dir/${base_name}_binwalk_results_$DATE_TAG.txt" 2>/dev/null
+  fi
   
-  # 提取文件系統（如果需要）
-  if [ "$EXTRACT_FILESYSTEM" -eq 1 ]; then
-    log "INFO" "提取韌體中的文件系統..."
-    binwalk -e "$FIRMWARE_FILE" --run-as=root -C "$binwalk_dir/${base_name}_extracted_$DATE_TAG" || log "WARNING" "無法提取文件系統"
+  # 提取文件系統（僅針對單個檔案）
+  if [ "$EXTRACT_FILESYSTEM" -eq 1 ] && [ -f "$SCAN_TARGET" ]; then
+    log "INFO" "提取文件系統..."
+    binwalk -e "$SCAN_TARGET" --run-as=root -C "$binwalk_dir/${base_name}_extracted_$DATE_TAG" || log "WARNING" "無法提取文件系統"
   fi
   
   log "SUCCESS" "binwalk分析完成"
@@ -550,13 +554,11 @@ preprocess_file() {
       SCAN_TARGET="$out_dir"
       ;;
     pkg)
-      if check_command "xar"; then
-        log "INFO" "擴展 PKG 封裝..."
-        mkdir -p "$out_dir"
-        xar -xf "$input_file" -C "$out_dir"
-        SCAN_TARGET="$out_dir"
-        verify_signature "$input_file"
-      fi
+      log "INFO" "提取 PKG 封裝內容..."
+      mkdir -p "$out_dir"
+      7z x "$input_file" "-o$out_dir" -y > /dev/null
+      SCAN_TARGET="$out_dir"
+      verify_signature "$input_file"
       ;;
     exe)
       log "INFO" "嘗試提取 Windows 執行檔內容..."
@@ -598,6 +600,10 @@ verify_signature() {
         log "WARNING" "數位簽章無效或未簽署"
       fi
     fi
+  elif [[ "$file" == *.pkg ]]; then
+    log "INFO" "檢查 PKG 簽名資訊..."
+    # 使用 7z 查看資源
+    7z l "$file" | grep -i "signature" > "$log_file" 2>&1 && log "SUCCESS" "發現簽名資訊" || log "WARNING" "未發現明顯簽名資訊"
   fi
 }
 

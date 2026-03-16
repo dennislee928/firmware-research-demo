@@ -24,7 +24,8 @@ export default function handler(req, res) {
                 .map(file => {
                    try {
                      const filePath = path.join(dirPath, file);
-                     const fstats = fs.statSync(filePath);
+                     // Using lstatSync to not follow symlinks, avoiding ENOENT if target is missing
+                     const fstats = fs.lstatSync(filePath);
                      return { name: file, size: fstats.size, mtime: fstats.mtime };
                    } catch (e) {
                      console.error(`Error stating file ${file} in ${f}:`, e.message);

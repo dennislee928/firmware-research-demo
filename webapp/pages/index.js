@@ -161,7 +161,7 @@ export default function Home() {
 
               <form onSubmit={handleUpload} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">韌體檔案 (.bin, .img, .fw)</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">韌體檔案 (.bin, .img, .fw, .pkg, .dmg, .iso, .zip, .7z, .tar, .gz, .exe, .msi)</label>
                   <input type="file" onChange={handleFileChange} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
                 </div>
 

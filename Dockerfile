@@ -34,7 +34,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xxd \
     dmg2img \
     p7zip-full \
-    xar \
     genisoimage \
     msitools \
     osslsigncode \

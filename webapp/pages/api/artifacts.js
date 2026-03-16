@@ -57,6 +57,8 @@ export default function handler(req, res) {
       }
 
       const content = fs.readFileSync(filePath, "utf8");
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("X-Content-Type-Options", "nosniff");
       return res.status(200).send(content);
     }
 

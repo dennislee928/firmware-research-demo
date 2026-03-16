@@ -129,6 +129,14 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# 每次分析時會重置的狀態
+PREPROCESS_SUMMARY="未進行額外預處理"
+SIGNATURE_SUMMARY="不適用"
+SIGNATURE_STATUS="not_applicable"
+PE_SECURITY_SUMMARY="不適用"
+PE_ASLR=""
+PE_DEP=""
+
 #===============================================================================
 # 函數定義
 #===============================================================================
@@ -164,6 +172,24 @@ check_command() {
     return 1
   fi
   return 0
+}
+
+lowercase_string() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+count_directory_files() {
+  find "$1" -type f 2>/dev/null | wc -l | awk '{print $1}'
+}
+
+reset_analysis_state() {
+  PREPROCESS_SUMMARY="未進行額外預處理"
+  SIGNATURE_SUMMARY="不適用"
+  SIGNATURE_STATUS="not_applicable"
+  PE_SECURITY_SUMMARY="不適用"
+  PE_ASLR=""
+  PE_DEP=""
+  SCAN_TARGET="$FIRMWARE_FILE"
 }
 
 # 初始化目錄結構
@@ -207,27 +233,36 @@ perform_hexdump_analysis() {
   local hexdump_dir="$WORK_DIR/hexdump-analysis"
   local base_name=$(basename "$FIRMWARE_FILE")
   local full_dump="$hexdump_dir/${base_name}_full_dump_$DATE_TAG.txt"
+  local telnetd_output="$hexdump_dir/${base_name}_telnetd_pattern_$DATE_TAG.txt"
+  local security_output="$hexdump_dir/${base_name}_security_patterns_$DATE_TAG.txt"
   
-  # Try hexdump, fallback to xxd
-  if command -v hexdump &> /dev/null; then
-    hexdump -C "$FIRMWARE_FILE" > "$full_dump"
-  elif command -v xxd &> /dev/null; then
-    xxd "$FIRMWARE_FILE" > "$full_dump"
+  if [ -d "$SCAN_TARGET" ]; then
+    find "$SCAN_TARGET" -type f > "$full_dump"
+    grep -R -a -n "telnetd" "$SCAN_TARGET" > "$telnetd_output" || log "INFO" "未發現telnetd模式"
+    grep -R -a -n -E "dropbear|/etc/shadow" "$SCAN_TARGET" > "$security_output" || log "INFO" "未發現dropbear或shadow模式"
+    log "INFO" "生成提取內容清單: $full_dump"
   else
-    log "ERROR" "找不到 hexdump 或 xxd 工具，跳過此步驟"
-    return 1
+    # Try hexdump, fallback to xxd
+    if command -v hexdump &> /dev/null; then
+      hexdump -C "$FIRMWARE_FILE" > "$full_dump"
+    elif command -v xxd &> /dev/null; then
+      xxd "$FIRMWARE_FILE" > "$full_dump"
+    else
+      log "ERROR" "找不到 hexdump 或 xxd 工具，跳過此步驟"
+      return 1
+    fi
+    
+    log "INFO" "生成完整hexdump: $full_dump"
+    
+    grep -n "telnetd" "$full_dump" > "$telnetd_output" || log "INFO" "未發現telnetd模式"
+    grep -n "dropbear\|shadow" "$full_dump" > "$security_output" || log "INFO" "未發現dropbear或shadow模式"
   fi
   
-  log "INFO" "生成完整hexdump: $full_dump"
-  
   if [ -f "$full_dump" ]; then
-    grep -n "telnetd" "$full_dump" > "$hexdump_dir/${base_name}_telnetd_pattern_$DATE_TAG.txt" || log "INFO" "未發現telnetd模式"
-    grep -n "dropbear\|shadow" "$full_dump" > "$hexdump_dir/${base_name}_security_patterns_$DATE_TAG.txt" || log "INFO" "未發現dropbear或shadow模式"
-    
     # 將最新的分析結果建立軟鏈接
     ln -sf "$full_dump" "$hexdump_dir/full_dump.txt"
-    ln -sf "$hexdump_dir/${base_name}_telnetd_pattern_$DATE_TAG.txt" "$hexdump_dir/telnetd_pattern.txt"
-    ln -sf "$hexdump_dir/${base_name}_security_patterns_$DATE_TAG.txt" "$hexdump_dir/security_patterns.txt"
+    ln -sf "$telnetd_output" "$hexdump_dir/telnetd_pattern.txt"
+    ln -sf "$security_output" "$hexdump_dir/security_patterns.txt"
   fi
   
   log "SUCCESS" "hexdump分析完成"
@@ -290,10 +325,20 @@ run_yara_rules() {
 
   local yara_dir="$WORK_DIR/yara-rules"
   local base_name=$(basename "$FIRMWARE_FILE")
+  local telnet_results="$yara_dir/${base_name}_telnetd_results_$DATE_TAG.txt"
+  local network_results="$yara_dir/${base_name}_network_services_results_$DATE_TAG.txt"
   
   # 使用 -r 遞迴掃描目錄或單個檔案
-  yara -r "$yara_dir/telnetd_rule.yar" "$SCAN_TARGET" > "$yara_dir/${base_name}_telnetd_results_$DATE_TAG.txt" 2>/dev/null
-  yara -r "$yara_dir/network_services_rule.yar" "$SCAN_TARGET" > "$yara_dir/${base_name}_network_services_results_$DATE_TAG.txt" 2>/dev/null
+  : > "$telnet_results"
+  : > "$network_results"
+
+  if ! yara -r "$yara_dir/telnetd_rule.yar" "$SCAN_TARGET" > "$telnet_results" 2>/dev/null; then
+    log "WARNING" "Detect_Telnetd 規則執行失敗"
+  fi
+
+  if ! yara -r "$yara_dir/network_services_rule.yar" "$SCAN_TARGET" > "$network_results" 2>/dev/null; then
+    log "WARNING" "Detect_Network_Services 規則執行失敗"
+  fi
   
   log "SUCCESS" "YARA規則運行完成"
 }
@@ -308,12 +353,17 @@ run_binwalk_analysis() {
 
   local binwalk_dir="$WORK_DIR/binwalk-analysis"
   local base_name=$(basename "$FIRMWARE_FILE")
+  local result_file="$binwalk_dir/${base_name}_binwalk_results_$DATE_TAG.txt"
   
   # 如果是目錄，則針對目錄中的每個檔案執行
   if [ -d "$SCAN_TARGET" ]; then
-    binwalk -r "$SCAN_TARGET" > "$binwalk_dir/${base_name}_binwalk_results_$DATE_TAG.txt" 2>/dev/null
+    if ! binwalk -r "$SCAN_TARGET" > "$result_file" 2>/dev/null; then
+      log "WARNING" "binwalk 無法完成遞迴掃描"
+    fi
   else
-    binwalk "$SCAN_TARGET" > "$binwalk_dir/${base_name}_binwalk_results_$DATE_TAG.txt" 2>/dev/null
+    if ! binwalk "$SCAN_TARGET" > "$result_file" 2>/dev/null; then
+      log "WARNING" "binwalk 無法分析檔案"
+    fi
   fi
   
   # 提取文件系統（僅針對單個檔案）
@@ -382,94 +432,253 @@ create_security_report() {
   log "INFO" "步驟7：創建安全分析報告"
   
   local base_name=$(basename "$FIRMWARE_FILE")
-  
-  # 準備報告數據
+  local hexdump_dir="$WORK_DIR/hexdump-analysis"
+  local yara_dir="$WORK_DIR/yara-rules"
+  local binwalk_dir="$WORK_DIR/binwalk-analysis"
+  local telnetd_pattern_file="$hexdump_dir/${base_name}_telnetd_pattern_$DATE_TAG.txt"
+  local security_pattern_file="$hexdump_dir/${base_name}_security_patterns_$DATE_TAG.txt"
+  local telnetd_yara_file="$yara_dir/${base_name}_telnetd_results_$DATE_TAG.txt"
+  local network_yara_file="$yara_dir/${base_name}_network_services_results_$DATE_TAG.txt"
+  local binwalk_file="$binwalk_dir/${base_name}_binwalk_results_$DATE_TAG.txt"
+  local file_size="$(du -h "$FIRMWARE_FILE" | cut -f1)"
+  local file_type="未知"
+  local scan_target_description="原始檔案"
+  local evidence_count=0
+  local risk_count=0
+  local recommendation_count=0
   local telnetd_found=0
   local dropbear_found=0
   local shadow_found=0
+  local telnetd_yara_hit=0
+  local network_yara_hit=0
+  local telnetd_example=""
+  local dropbear_example=""
+  local shadow_example=""
+  local binwalk_excerpt=""
   
-  if grep -q "telnetd" "$WORK_DIR/hexdump-analysis/telnetd_pattern.txt" 2>/dev/null; then
+  if check_command "file"; then
+    file_type=$(file -b "$FIRMWARE_FILE" 2>/dev/null || echo "未知")
+  fi
+
+  if [ -d "$SCAN_TARGET" ]; then
+    scan_target_description="提取後目錄 $(basename "$SCAN_TARGET")，包含 $(count_directory_files "$SCAN_TARGET") 個檔案"
+  elif [ "$SCAN_TARGET" != "$FIRMWARE_FILE" ]; then
+    local scan_target_type="未知"
+    if check_command "file"; then
+      scan_target_type=$(file -b "$SCAN_TARGET" 2>/dev/null || echo "未知")
+    fi
+    scan_target_description="轉換後檔案 $(basename "$SCAN_TARGET") (${scan_target_type})"
+  fi
+
+  if [ -s "$telnetd_pattern_file" ] && grep -q "telnetd" "$telnetd_pattern_file" 2>/dev/null; then
     telnetd_found=1
+    telnetd_example=$(head -n 1 "$telnetd_pattern_file" | tr -d '\r')
   fi
   
-  if grep -q "dropbear" "$WORK_DIR/hexdump-analysis/security_patterns.txt" 2>/dev/null; then
+  if [ -s "$security_pattern_file" ] && grep -q "dropbear" "$security_pattern_file" 2>/dev/null; then
     dropbear_found=1
+    dropbear_example=$(grep "dropbear" "$security_pattern_file" | head -n 1 | tr -d '\r')
   fi
   
-  if grep -q "shadow" "$WORK_DIR/hexdump-analysis/security_patterns.txt" 2>/dev/null; then
+  if [ -s "$security_pattern_file" ] && grep -q "shadow" "$security_pattern_file" 2>/dev/null; then
     shadow_found=1
+    shadow_example=$(grep "shadow" "$security_pattern_file" | head -n 1 | tr -d '\r')
   fi
-  
-  # 生成報告
+
+  if [ -s "$telnetd_yara_file" ] && grep -q "Detect_Telnetd" "$telnetd_yara_file" 2>/dev/null; then
+    telnetd_yara_hit=1
+  fi
+
+  if [ -s "$network_yara_file" ] && grep -q "Detect_Network_Services" "$network_yara_file" 2>/dev/null; then
+    network_yara_hit=1
+  fi
+
+  if [ -f "$binwalk_file" ]; then
+    binwalk_excerpt=$(grep -v '^[[:space:]]*$' "$binwalk_file" | head -n 8 || true)
+  fi
+
   cat > "$REPORT_FILE" << EOF
 # 韌體安全分析報告
 
-## 基本信息
+## 基本資訊
 - **韌體名稱**: ${base_name}
 - **分析時間**: $(date "+%Y-%m-%d %H:%M:%S")
-- **檔案大小**: $(du -h "$FIRMWARE_FILE" | cut -f1)
+- **原始檔案大小**: ${file_size}
+- **原始檔案類型**: ${file_type}
 
-## 檢測到的元件
+## 預處理摘要
+- ${PREPROCESS_SUMMARY}
+- **實際掃描目標**: ${scan_target_description}
 EOF
 
-  # 根據檢測到的內容添加報告細節
+  echo "" >> "$REPORT_FILE"
+  echo "## 觀察到的證據" >> "$REPORT_FILE"
+
   if [ $telnetd_found -eq 1 ]; then
-    echo "- ⚠️ 發現telnetd服務，位於偏移$(grep -n "telnetd" "$WORK_DIR/hexdump-analysis/telnetd_pattern.txt" | head -1 | cut -d: -f2- | awk '{print $1}')" >> "$REPORT_FILE"
+    echo "- 字串掃描命中 telnetd。示例: ${telnetd_example}" >> "$REPORT_FILE"
+    evidence_count=$((evidence_count + 1))
   fi
   
   if [ $dropbear_found -eq 1 ]; then
-    echo "- 🔍 發現dropbear (SSH) 服務，位於偏移$(grep -n "dropbear" "$WORK_DIR/hexdump-analysis/security_patterns.txt" | head -1 | cut -d: -f2- | awk '{print $1}')" >> "$REPORT_FILE"
+    echo "- 字串掃描命中 dropbear。示例: ${dropbear_example}" >> "$REPORT_FILE"
+    evidence_count=$((evidence_count + 1))
   fi
   
   if [ $shadow_found -eq 1 ]; then
-    echo "- ⚠️ 存在/etc/shadow參考，位於偏移$(grep -n "shadow" "$WORK_DIR/hexdump-analysis/security_patterns.txt" | head -1 | cut -d: -f2- | awk '{print $1}')" >> "$REPORT_FILE"
+    echo "- 字串掃描命中 /etc/shadow。示例: ${shadow_example}" >> "$REPORT_FILE"
+    evidence_count=$((evidence_count + 1))
   fi
-  
-  echo "- 📡 發現CAN匯流排介面初始化代碼" >> "$REPORT_FILE"
-  
-  # 繼續填充報告
-  cat >> "$REPORT_FILE" << 'EOF'
 
-## 風險評估
-| 元件 | 風險等級 | 說明 |
-|------|---------|------|
-| telnetd | 高 | 未加密服務，容易遭受中間人攻擊 |
-| dropbear | 中 | SSH實作，但需要檢查版本與已知漏洞 |
-| /etc/shadow | 中 | 標準密碼存儲，需確認權限設置 |
-| CAN匯流排 | 低 | 用於車載通訊，但無法遠程存取 |
+  if [ $telnetd_yara_hit -eq 1 ]; then
+    echo "- YARA 規則 Detect_Telnetd 命中。" >> "$REPORT_FILE"
+    evidence_count=$((evidence_count + 1))
+  fi
 
-## 緩解建議
-1. 禁用telnetd服務，改用SSH
-2. 更新dropbear至最新版本
-3. 確保敏感檔案適當保護
-4. 監控CAN匯流排異常活動
+  if [ $network_yara_hit -eq 1 ]; then
+    echo "- YARA 規則 Detect_Network_Services 命中。" >> "$REPORT_FILE"
+    evidence_count=$((evidence_count + 1))
+  fi
 
-## YARA規則檢測結果
-EOF
+  if [ "$SIGNATURE_STATUS" != "not_applicable" ]; then
+    echo "- 數位簽章檢查: ${SIGNATURE_SUMMARY}" >> "$REPORT_FILE"
+    evidence_count=$((evidence_count + 1))
+  fi
 
-  # 添加YARA檢測結果
-  if [ -f "$WORK_DIR/yara-rules/${base_name}_telnetd_results_$DATE_TAG.txt" ]; then
-    if grep -q "Detect_Telnetd" "$WORK_DIR/yara-rules/${base_name}_telnetd_results_$DATE_TAG.txt"; then
-      echo "- ✅ 使用`Detect_Telnetd`規則成功檢測到telnetd服務" >> "$REPORT_FILE"
-    else
-      echo "- ❌ 使用`Detect_Telnetd`規則未檢測到telnetd服務" >> "$REPORT_FILE"
+  if [ "$PE_SECURITY_SUMMARY" != "不適用" ]; then
+    echo "- PE 安全旗標: ${PE_SECURITY_SUMMARY}" >> "$REPORT_FILE"
+    evidence_count=$((evidence_count + 1))
+  fi
+
+  if [ $evidence_count -eq 0 ]; then
+    echo "- 本次自動化分析未命中高信心字串或 YARA 規則。" >> "$REPORT_FILE"
+  fi
+
+  echo "" >> "$REPORT_FILE"
+  echo "## 風險評估" >> "$REPORT_FILE"
+
+  if [ $telnetd_found -eq 1 ] || [ $telnetd_yara_hit -eq 1 ]; then
+    if [ $risk_count -eq 0 ]; then
+      echo "| 項目 | 風險等級 | 依據 |" >> "$REPORT_FILE"
+      echo "|------|----------|------|" >> "$REPORT_FILE"
     fi
+    echo "| telnetd | 高 | 命中字串或規則，代表可能暴露未加密管理介面 |" >> "$REPORT_FILE"
+    risk_count=$((risk_count + 1))
   fi
-  
-  if [ -f "$WORK_DIR/yara-rules/${base_name}_network_services_results_$DATE_TAG.txt" ]; then
-    if grep -q "Detect_Network_Services" "$WORK_DIR/yara-rules/${base_name}_network_services_results_$DATE_TAG.txt"; then
-      echo "- ✅ 使用`Detect_Network_Services`規則檢測到多種網路服務" >> "$REPORT_FILE"
-    else
-      echo "- ❌ 使用`Detect_Network_Services`規則未檢測到網路服務" >> "$REPORT_FILE"
+
+  if [ $dropbear_found -eq 1 ]; then
+    if [ $risk_count -eq 0 ]; then
+      echo "| 項目 | 風險等級 | 依據 |" >> "$REPORT_FILE"
+      echo "|------|----------|------|" >> "$REPORT_FILE"
     fi
+    echo "| dropbear | 中 | 發現 SSH 服務實作，需要進一步確認版本與配置 |" >> "$REPORT_FILE"
+    risk_count=$((risk_count + 1))
   fi
 
-  # 結論
-  cat >> "$REPORT_FILE" << 'EOF'
+  if [ $shadow_found -eq 1 ]; then
+    if [ $risk_count -eq 0 ]; then
+      echo "| 項目 | 風險等級 | 依據 |" >> "$REPORT_FILE"
+      echo "|------|----------|------|" >> "$REPORT_FILE"
+    fi
+    echo "| /etc/shadow | 中 | 發現密碼資料路徑參考，需確認檔案保護與權限控制 |" >> "$REPORT_FILE"
+    risk_count=$((risk_count + 1))
+  fi
 
-## 結論
-此韌體包含潛在的不安全元件，建議在部署前進行適當的安全加固。
-EOF
+  if [ "$SIGNATURE_STATUS" = "invalid_or_untrusted" ] || [ "$SIGNATURE_STATUS" = "unverified" ]; then
+    if [ $risk_count -eq 0 ]; then
+      echo "| 項目 | 風險等級 | 依據 |" >> "$REPORT_FILE"
+      echo "|------|----------|------|" >> "$REPORT_FILE"
+    fi
+    echo "| 數位簽章 | 中 | 無法建立有效信任鏈，需人工確認來源與完整性 |" >> "$REPORT_FILE"
+    risk_count=$((risk_count + 1))
+  fi
+
+  if [ "$PE_ASLR" = "False" ] || [ "$PE_DEP" = "False" ]; then
+    if [ $risk_count -eq 0 ]; then
+      echo "| 項目 | 風險等級 | 依據 |" >> "$REPORT_FILE"
+      echo "|------|----------|------|" >> "$REPORT_FILE"
+    fi
+    echo "| PE 安全旗標 | 中 | 執行檔未完整啟用 ASLR 或 DEP |" >> "$REPORT_FILE"
+    risk_count=$((risk_count + 1))
+  fi
+
+  if [ $risk_count -eq 0 ]; then
+    echo "- 目前沒有足夠證據支持高或中風險結論；這只表示本次自動檢查未命中。" >> "$REPORT_FILE"
+  fi
+
+  echo "" >> "$REPORT_FILE"
+  echo "## 緩解建議" >> "$REPORT_FILE"
+
+  if [ $telnetd_found -eq 1 ] || [ $telnetd_yara_hit -eq 1 ]; then
+    echo "- 若非必要，停用 telnetd 並改用受管控的 SSH。" >> "$REPORT_FILE"
+    recommendation_count=$((recommendation_count + 1))
+  fi
+
+  if [ $dropbear_found -eq 1 ]; then
+    echo "- 核對 dropbear 版本、認證配置與已知漏洞。" >> "$REPORT_FILE"
+    recommendation_count=$((recommendation_count + 1))
+  fi
+
+  if [ $shadow_found -eq 1 ]; then
+    echo "- 檢查密碼資料是否可被未授權程序讀取，並驗證檔案權限。" >> "$REPORT_FILE"
+    recommendation_count=$((recommendation_count + 1))
+  fi
+
+  if [ "$SIGNATURE_STATUS" = "invalid_or_untrusted" ] || [ "$SIGNATURE_STATUS" = "unverified" ]; then
+    echo "- 以可信 CA 或供應商鏈重新驗證簽章，必要時比對雜湊來源。" >> "$REPORT_FILE"
+    recommendation_count=$((recommendation_count + 1))
+  fi
+
+  if [ "$PE_ASLR" = "False" ] || [ "$PE_DEP" = "False" ]; then
+    echo "- 重新檢視編譯選項，補齊 ASLR 與 DEP 等基礎防護。" >> "$REPORT_FILE"
+    recommendation_count=$((recommendation_count + 1))
+  fi
+
+  if [ $recommendation_count -eq 0 ]; then
+    echo "- 建議搭配動態分析、依賴盤點與人工逆向確認結果。" >> "$REPORT_FILE"
+  fi
+
+  echo "" >> "$REPORT_FILE"
+  echo "## YARA規則檢測結果" >> "$REPORT_FILE"
+
+  if [ -f "$telnetd_yara_file" ]; then
+    if [ $telnetd_yara_hit -eq 1 ]; then
+      echo "- Detect_Telnetd: 命中" >> "$REPORT_FILE"
+    else
+      echo "- Detect_Telnetd: 無命中" >> "$REPORT_FILE"
+    fi
+  else
+    echo "- Detect_Telnetd: 未執行" >> "$REPORT_FILE"
+  fi
+
+  if [ -f "$network_yara_file" ]; then
+    if [ $network_yara_hit -eq 1 ]; then
+      echo "- Detect_Network_Services: 命中" >> "$REPORT_FILE"
+    else
+      echo "- Detect_Network_Services: 無命中" >> "$REPORT_FILE"
+    fi
+  else
+    echo "- Detect_Network_Services: 未執行" >> "$REPORT_FILE"
+  fi
+
+  echo "" >> "$REPORT_FILE"
+  echo "## Binwalk 摘要" >> "$REPORT_FILE"
+
+  if [ -n "$binwalk_excerpt" ]; then
+    echo '```text' >> "$REPORT_FILE"
+    printf '%s\n' "$binwalk_excerpt" >> "$REPORT_FILE"
+    echo '```' >> "$REPORT_FILE"
+  else
+    echo "- 未檢測到可解析的 binwalk 特徵，或此步驟未產生輸出。" >> "$REPORT_FILE"
+  fi
+
+  echo "" >> "$REPORT_FILE"
+  echo "## 結論" >> "$REPORT_FILE"
+
+  if [ $risk_count -gt 0 ]; then
+    echo "此報告僅列出本次自動化流程實際命中的證據與風險，未再填入示範用模板內容。" >> "$REPORT_FILE"
+  else
+    echo "本次自動化檢查未命中高信心風險訊號，但這不代表檔案安全；仍建議結合人工審查與動態分析。" >> "$REPORT_FILE"
+  fi
 
   # 同步到標準的報告文件
   cp "$REPORT_FILE" "$WORK_DIR/simulated_report.md"
@@ -543,38 +752,75 @@ SCAN_TARGET=""
 preprocess_file() {
   local input_file="$1"
   local ext="${input_file##*.}"
+  local ext_lower
   local base_name=$(basename "$input_file")
-  local out_dir="$WORK_DIR/preprocessed/${base_name}_extracted"
+  local out_dir="$WORK_DIR/preprocessed/${base_name}_${DATE_TAG}_extracted"
+  local converted_file="$WORK_DIR/preprocessed/${base_name}_${DATE_TAG}.img"
   
   SCAN_TARGET="$input_file"
   log "INFO" "預處理檔案: $input_file (格式: $ext)"
+  ext_lower=$(lowercase_string "$ext")
   
-  case "${ext,,}" in
+  case "$ext_lower" in
     dmg)
       if check_command "dmg2img"; then
         log "INFO" "轉換 DMG 為 IMG..."
-        dmg2img "$input_file" "$WORK_DIR/preprocessed/${base_name}.img"
-        SCAN_TARGET="$WORK_DIR/preprocessed/${base_name}.img"
-        verify_signature "$input_file"
+        if dmg2img "$input_file" "$converted_file"; then
+          SCAN_TARGET="$converted_file"
+          PREPROCESS_SUMMARY="已將 DMG 轉換為 IMG: $(basename "$converted_file")"
+        else
+          log "WARNING" "DMG 轉換失敗，回退至原始檔案"
+          PREPROCESS_SUMMARY="DMG 轉換失敗，直接分析原始檔案"
+        fi
+      else
+        PREPROCESS_SUMMARY="缺少 dmg2img，直接分析原始檔案"
       fi
       ;;
     iso)
-      log "INFO" "提取 ISO 內容..."
-      mkdir -p "$out_dir"
-      7z x "$input_file" "-o$out_dir" -y > /dev/null
-      SCAN_TARGET="$out_dir"
+      if check_command "7z"; then
+        log "INFO" "提取 ISO 內容..."
+        mkdir -p "$out_dir"
+        if 7z x "$input_file" "-o$out_dir" -y > /dev/null 2>&1; then
+          SCAN_TARGET="$out_dir"
+          PREPROCESS_SUMMARY="已提取 ISO 內容至 $(basename "$out_dir")，共 $(count_directory_files "$out_dir") 個檔案"
+        else
+          log "WARNING" "ISO 提取失敗，回退至原始檔案"
+          PREPROCESS_SUMMARY="ISO 提取失敗，直接分析原始檔案"
+        fi
+      else
+        PREPROCESS_SUMMARY="缺少 7z，直接分析原始檔案"
+      fi
       ;;
     pkg)
-      log "INFO" "提取 PKG 封裝內容..."
-      mkdir -p "$out_dir"
-      7z x "$input_file" "-o$out_dir" -y > /dev/null
-      SCAN_TARGET="$out_dir"
+      if check_command "7z"; then
+        log "INFO" "提取 PKG 封裝內容..."
+        mkdir -p "$out_dir"
+        if 7z x "$input_file" "-o$out_dir" -y > /dev/null 2>&1; then
+          SCAN_TARGET="$out_dir"
+          PREPROCESS_SUMMARY="已提取 PKG 內容至 $(basename "$out_dir")，共 $(count_directory_files "$out_dir") 個檔案"
+        else
+          log "WARNING" "PKG 提取失敗，回退至原始檔案"
+          PREPROCESS_SUMMARY="PKG 提取失敗，直接分析原始檔案"
+        fi
+      else
+        PREPROCESS_SUMMARY="缺少 7z，直接分析原始檔案"
+      fi
       verify_signature "$input_file"
       ;;
     exe)
-      log "INFO" "嘗試提取 Windows 執行檔內容..."
-      mkdir -p "$out_dir"
-      7z x "$input_file" "-o$out_dir" -y > /dev/null && SCAN_TARGET="$out_dir"
+      if check_command "7z"; then
+        log "INFO" "嘗試提取 Windows 執行檔內容..."
+        mkdir -p "$out_dir"
+        if 7z x "$input_file" "-o$out_dir" -y > /dev/null 2>&1; then
+          SCAN_TARGET="$out_dir"
+          PREPROCESS_SUMMARY="已提取 EXE 內容至 $(basename "$out_dir")，共 $(count_directory_files "$out_dir") 個檔案"
+        else
+          log "WARNING" "EXE 提取失敗，直接分析原始檔案"
+          PREPROCESS_SUMMARY="EXE 提取失敗，直接分析原始檔案"
+        fi
+      else
+        PREPROCESS_SUMMARY="缺少 7z，直接分析原始檔案"
+      fi
       verify_signature "$input_file"
       check_pe_security "$input_file"
       ;;
@@ -582,16 +828,35 @@ preprocess_file() {
       if check_command "msiextract"; then
         log "INFO" "提取 MSI 安裝包內容..."
         mkdir -p "$out_dir"
-        msiextract "$input_file" -C "$out_dir"
-        SCAN_TARGET="$out_dir"
-        verify_signature "$input_file"
+        if msiextract "$input_file" -C "$out_dir"; then
+          SCAN_TARGET="$out_dir"
+          PREPROCESS_SUMMARY="已提取 MSI 內容至 $(basename "$out_dir")，共 $(count_directory_files "$out_dir") 個檔案"
+        else
+          log "WARNING" "MSI 提取失敗，直接分析原始檔案"
+          PREPROCESS_SUMMARY="MSI 提取失敗，直接分析原始檔案"
+        fi
+      else
+        PREPROCESS_SUMMARY="缺少 msiextract，直接分析原始檔案"
       fi
+      verify_signature "$input_file"
       ;;
     zip|7z|tar|gz|xz)
-      log "INFO" "解壓縮檔案..."
-      mkdir -p "$out_dir"
-      7z x "$input_file" "-o$out_dir" -y > /dev/null
-      SCAN_TARGET="$out_dir"
+      if check_command "7z"; then
+        log "INFO" "解壓縮檔案..."
+        mkdir -p "$out_dir"
+        if 7z x "$input_file" "-o$out_dir" -y > /dev/null 2>&1; then
+          SCAN_TARGET="$out_dir"
+          PREPROCESS_SUMMARY="已解壓縮至 $(basename "$out_dir")，共 $(count_directory_files "$out_dir") 個檔案"
+        else
+          log "WARNING" "壓縮檔提取失敗，直接分析原始檔案"
+          PREPROCESS_SUMMARY="壓縮檔提取失敗，直接分析原始檔案"
+        fi
+      else
+        PREPROCESS_SUMMARY="缺少 7z，直接分析原始檔案"
+      fi
+      ;;
+    *)
+      PREPROCESS_SUMMARY="未進行額外預處理，直接分析原始檔案"
       ;;
   esac
 }
@@ -600,38 +865,93 @@ preprocess_file() {
 verify_signature() {
   local file="$1"
   local log_file="$LOG_DIR/signature_check_$(basename "$file").txt"
+  local file_lower
   log "INFO" "正在驗證數位簽章: $file"
+  file_lower=$(lowercase_string "$file")
   
-  if [[ "$file" == *.exe ]] || [[ "$file" == *.msi ]]; then
+  if [[ "$file_lower" == *.exe ]] || [[ "$file_lower" == *.msi ]]; then
     if check_command "osslsigncode"; then
-      osslsigncode verify "$file" > "$log_file" 2>&1
-      if grep -q "Signature verification: ok" "$log_file"; then
+      if osslsigncode verify "$file" > "$log_file" 2>&1; then
         log "SUCCESS" "數位簽章驗證通過"
+        SIGNATURE_STATUS="valid"
+        SIGNATURE_SUMMARY="數位簽章驗證通過"
+      elif grep -qi "No signature found" "$log_file"; then
+        log "WARNING" "未發現數位簽章"
+        SIGNATURE_STATUS="missing"
+        SIGNATURE_SUMMARY="未發現 Authenticode 簽章"
+      elif grep -qi 'Use the "-CAfile" option' "$log_file"; then
+        log "WARNING" "偵測到簽章資訊，但無法在目前環境完成信任鏈驗證"
+        SIGNATURE_STATUS="unverified"
+        SIGNATURE_SUMMARY="偵測到簽章資訊，但缺少 CA 憑證鏈，無法完成信任驗證"
       else
         log "WARNING" "數位簽章無效或未簽署"
+        SIGNATURE_STATUS="invalid_or_untrusted"
+        SIGNATURE_SUMMARY="數位簽章驗證失敗或來源不受信任"
       fi
+    else
+      SIGNATURE_STATUS="tool_missing"
+      SIGNATURE_SUMMARY="缺少 osslsigncode，未執行簽章檢查"
     fi
-  elif [[ "$file" == *.pkg ]]; then
+  elif [[ "$file_lower" == *.pkg ]]; then
     log "INFO" "檢查 PKG 簽名資訊..."
-    # 使用 7z 查看資源
-    7z l "$file" | grep -i "signature" > "$log_file" 2>&1 && log "SUCCESS" "發現簽名資訊" || log "WARNING" "未發現明顯簽名資訊"
+    if check_command "7z"; then
+      if 7z l "$file" > "$log_file" 2>&1 && grep -qi "signature" "$log_file"; then
+        log "SUCCESS" "發現簽名資訊"
+        SIGNATURE_STATUS="present"
+        SIGNATURE_SUMMARY="封裝內容中發現簽名相關資訊"
+      else
+        log "WARNING" "未發現明顯簽名資訊"
+        SIGNATURE_STATUS="missing"
+        SIGNATURE_SUMMARY="未發現明顯簽名資訊"
+      fi
+    else
+      SIGNATURE_STATUS="tool_missing"
+      SIGNATURE_SUMMARY="缺少 7z，未執行 PKG 簽章檢查"
+    fi
   fi
 }
 
 # 檢查 PE 安全特性 (ASLR, DEP 等)
 check_pe_security() {
   local file="$1"
+  local output_file="$LOG_DIR/pe_security_$(basename "$file").txt"
   log "INFO" "檢查 PE 安全特性: $file"
-  python3 -c "
-import pefile
+
+  if ! check_command "python3"; then
+    PE_SECURITY_SUMMARY="缺少 python3，未檢查 PE 安全旗標"
+    return
+  fi
+
+  if python3 - "$file" > "$output_file" 2>&1 <<'EOF'
 import sys
+
 try:
-    pe = pefile.PE('$file')
-    print(f'ASLR: {bool(pe.OPTIONAL_HEADER.DllCharacteristics & 0x0040)}')
-    print(f'DEP: {bool(pe.OPTIONAL_HEADER.DllCharacteristics & 0x0100)}')
-except Exception as e:
-    print(f'Error: {e}')
-" > "$LOG_DIR/pe_security_$(basename "$file").txt"
+    import pefile
+except Exception as exc:
+    print(f"Error: {exc}")
+    raise SystemExit(2)
+
+path = sys.argv[1]
+
+try:
+    pe = pefile.PE(path)
+    aslr = bool(pe.OPTIONAL_HEADER.DllCharacteristics & 0x0040)
+    dep = bool(pe.OPTIONAL_HEADER.DllCharacteristics & 0x0100)
+    print(f"ASLR: {aslr}")
+    print(f"DEP: {dep}")
+except Exception as exc:
+    print(f"Error: {exc}")
+    raise SystemExit(1)
+EOF
+  then
+    PE_ASLR=$(grep '^ASLR:' "$output_file" | awk '{print $2}')
+    PE_DEP=$(grep '^DEP:' "$output_file" | awk '{print $2}')
+    PE_SECURITY_SUMMARY="ASLR=${PE_ASLR:-未知}, DEP=${PE_DEP:-未知}"
+    log "INFO" "PE 安全特性: $PE_SECURITY_SUMMARY"
+  else
+    PE_SECURITY_SUMMARY="無法解析 PE 安全旗標"
+    log "WARNING" "$PE_SECURITY_SUMMARY"
+  fi
 }
 
 # 分析單個檔案
@@ -645,6 +965,7 @@ analyze_single_file() {
   DATE_TAG="$(date "+%Y%m%d_%H%M%S")"
   LOG_FILE="$LOG_DIR/analysis_${FIRMWARE_NAME}_$DATE_TAG.log"
   REPORT_FILE="$REPORT_DIR/report_${FIRMWARE_NAME}_$DATE_TAG.md"
+  reset_analysis_state
   
   # 執行預處理
   preprocess_file "$FIRMWARE_FILE"

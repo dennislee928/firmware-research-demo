@@ -1,1 +1,1 @@
-/firmware-analysis/hexdump-analysis/pohw04utua2yq2bw5050o2yvw.dmg_security_patterns_20260316_141054.txt
+/Users/dennis_leedennis_lee/Documents/GitHub/firmware-research-demo/hexdump-analysis/u56cwa54vq9lff76pwh98kgpn.exe_security_patterns_20260316_222436.txt

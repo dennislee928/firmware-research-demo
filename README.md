@@ -22,6 +22,15 @@ open localhost:3000
 ```
 ![Screenshot 2025-04-14 at 1 11 00 PM](https://github.com/user-attachments/assets/5fb94635-ccb3-4a10-ba0b-89e404ef64bd)
 
+
+
+<img width="1320" height="891" alt="Screenshot 2026-03-16 at 11 34 27 PM" src="https://github.com/user-attachments/assets/373d3c04-2b05-464c-acea-ccc4aabc19a3" />
+
+
+<img width="894" height="613" alt="Screenshot 2026-03-16 at 11 33 00 PM" src="https://github.com/user-attachments/assets/52f699a6-a0b1-4526-9ca6-0d9de4be9b92" />
+
+
+
 ---
 ## Demo:
 https://youtu.be/J5Wb_5GvQmA

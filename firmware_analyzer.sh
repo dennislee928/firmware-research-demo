@@ -1729,7 +1729,7 @@ EOF
   echo "" >> "$REPORT_FILE"
   echo "## 緩解建議" >> "$REPORT_FILE"
 
-  if [ $telnetd_found -eq 1 ] || [ $telnetd_yara_hit -eq 1 ]; then
+  if [ $telnetd_found -eq 1 ] || [[ -n "${YARA_HITS['telnetd_rule']:-}" ]]; then
     echo "- 若非必要，停用 telnetd 並改用受管控的 SSH。" >> "$REPORT_FILE"
     recommendation_count=$((recommendation_count + 1))
   fi

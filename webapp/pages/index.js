@@ -3,6 +3,14 @@ import axios from "axios";
 import Head from "next/head";
 
 export default function Home() {
+  const artifactFolders = [
+    { id: "hexdump-analysis", label: "Hexdump 分析" },
+    { id: "binwalk-analysis", label: "Binwalk 分析" },
+    { id: "yara-rules", label: "YARA 規則" },
+    { id: "dynamic-analysis", label: "動態分析" },
+    { id: "dependency-inventory", label: "依賴盤點" },
+  ];
+
   const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
@@ -242,15 +250,15 @@ export default function Home() {
             {/* Artifacts Explorer */}
             <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-bold text-gray-800 mb-4">檔案檢索與結果庫</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {['hexdump-analysis', 'binwalk-analysis', 'yara-rules'].map((folder) => (
-                  <div key={folder}>
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">{folder.split('-')[0]} 分析</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+                {artifactFolders.map((folder) => (
+                  <div key={folder.id}>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">{folder.label}</h3>
                     <ul className="space-y-1.5 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                      {artifacts[folder]?.length > 0 ? (
-                        artifacts[folder].map((art, idx) => (
+                      {artifacts[folder.id]?.length > 0 ? (
+                        artifacts[folder.id].map((art, idx) => (
                           <li key={idx}>
-                            <button onClick={() => readArtifact(folder, art.name)} className="w-full text-left px-2 py-1.5 text-xs text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded transition truncate">
+                            <button onClick={() => readArtifact(folder.id, art.name)} className="w-full text-left px-2 py-1.5 text-xs text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded transition truncate">
                               📄 {art.name}
                             </button>
                           </li>

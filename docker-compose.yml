@@ -8,6 +8,8 @@ services:
       # Persistent storage for analysis data
       - ./firmware_samples:/firmware-analysis/firmware_samples:rw
       - ./binwalk-analysis:/firmware-analysis/binwalk-analysis:rw
+      - ./dependency-inventory:/firmware-analysis/dependency-inventory:rw
+      - ./dynamic-analysis:/firmware-analysis/dynamic-analysis:rw
       - ./hexdump-analysis:/firmware-analysis/hexdump-analysis:rw
       - ./yara-rules:/firmware-analysis/yara-rules:rw
       - ./screenshots:/firmware-analysis/screenshots:rw

@@ -196,6 +196,8 @@ reset_analysis_state() {
 initialize_directories() {
   log "INFO" "初始化目錄結構..."
   mkdir -p "$WORK_DIR/binwalk-analysis"
+  mkdir -p "$WORK_DIR/dependency-inventory"
+  mkdir -p "$WORK_DIR/dynamic-analysis"
   mkdir -p "$WORK_DIR/hexdump-analysis"
   mkdir -p "$WORK_DIR/yara-rules"
   mkdir -p "$WORK_DIR/screenshots/ghidra"
@@ -375,9 +377,315 @@ run_binwalk_analysis() {
   log "SUCCESS" "binwalk分析完成"
 }
 
+generate_dependency_inventory() {
+  log "INFO" "步驟5：建立依賴盤點"
+
+  local inventory_dir="$WORK_DIR/dependency-inventory"
+  local base_name=$(basename "$FIRMWARE_FILE")
+  local inventory_file="$inventory_dir/${base_name}_dependency_inventory_$DATE_TAG.txt"
+  local scan_root="$SCAN_TARGET"
+  local manifest_tmp
+  local dependency_tmp
+  local library_tmp
+  local reference_tmp
+  local manifest_count=0
+  local dependency_count=0
+  local library_count=0
+  local reference_count=0
+
+  manifest_tmp=$(mktemp)
+  dependency_tmp=$(mktemp)
+  library_tmp=$(mktemp)
+  reference_tmp=$(mktemp)
+
+  if [ -d "$scan_root" ]; then
+    while IFS= read -r manifest; do
+      [ -z "$manifest" ] && continue
+      echo "${manifest#$scan_root/}" >> "$manifest_tmp"
+
+      case "$(basename "$manifest")" in
+        package.json|composer.json)
+          if check_command "python3"; then
+            python3 - "$manifest" <<'EOF' >> "$dependency_tmp" 2>/dev/null || true
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+    data = json.load(fh)
+
+for section in ("dependencies", "devDependencies", "require"):
+    deps = data.get(section, {})
+    if isinstance(deps, dict):
+        for name in deps:
+            print(name)
+EOF
+          fi
+          ;;
+        requirements.txt)
+          grep -E -v '^[[:space:]]*($|#)' "$manifest" | sed 's/[<>=!~].*$//' >> "$dependency_tmp" || true
+          ;;
+        Gemfile)
+          grep -E "^[[:space:]]*gem[[:space:]]+['\"]" "$manifest" | sed -E "s/^[[:space:]]*gem[[:space:]]+['\"]([^'\"]+)['\"].*/\1/" >> "$dependency_tmp" || true
+          ;;
+        go.mod)
+          awk '
+            /^require[[:space:]]*\($/ { in_block=1; next }
+            in_block && /^\)/ { in_block=0; next }
+            in_block && NF { print $1; next }
+            /^require[[:space:]]+/ { print $2 }
+          ' "$manifest" >> "$dependency_tmp" || true
+          ;;
+        Cargo.toml)
+          awk '
+            /^\[dependencies\]/ { in_block=1; next }
+            /^\[/ && $0 !~ /^\[dependencies\]/ { in_block=0 }
+            in_block && /^[[:space:]]*[A-Za-z0-9_.-]+[[:space:]]*=/ {
+              gsub(/[[:space:]]*=.*/, "", $0)
+              gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0)
+              print $0
+            }
+          ' "$manifest" >> "$dependency_tmp" || true
+          ;;
+      esac
+    done < <(find "$scan_root" -type f \( \
+      -name "package.json" -o \
+      -name "requirements.txt" -o \
+      -name "Pipfile" -o \
+      -name "pyproject.toml" -o \
+      -name "poetry.lock" -o \
+      -name "Gemfile" -o \
+      -name "go.mod" -o \
+      -name "Cargo.toml" -o \
+      -name "composer.json" -o \
+      -name "pom.xml" -o \
+      -name "build.gradle" -o \
+      -name "build.gradle.kts" -o \
+      -name "*.csproj" -o \
+      -name "*.nuspec" \
+    \) | sort)
+
+    find "$scan_root" -type f \( \
+      -name "*.so" -o -name "*.so.*" -o -name "*.dll" -o -name "*.dylib" -o -name "*.a" -o -name "*.jar" \
+    \) | sed "s#^$scan_root/##" | sort -u > "$library_tmp" || true
+
+    if check_command "strings"; then
+      while IFS= read -r candidate; do
+        [ -z "$candidate" ] && continue
+        strings -a "$candidate" 2>/dev/null | \
+          grep -Eo '([A-Za-z0-9._+-]+\.so(\.[0-9]+)*)|([A-Za-z0-9._+-]+\.dll)|([A-Za-z0-9._+-]+\.dylib)' | \
+          sort -u | head -n 20 | while IFS= read -r ref; do
+            [ -n "$ref" ] && echo "${candidate#$scan_root/} -> $ref" >> "$reference_tmp"
+          done
+      done < <(find "$scan_root" -type f | head -n 40)
+    fi
+  else
+    if [[ "$scan_root" == *.so ]] || [[ "$scan_root" == *.dll ]] || [[ "$scan_root" == *.dylib ]] || [[ "$scan_root" == *.jar ]]; then
+      echo "$(basename "$scan_root")" > "$library_tmp"
+    fi
+
+    if check_command "strings"; then
+      strings -a "$scan_root" 2>/dev/null | \
+        grep -Eo '([A-Za-z0-9._+-]+\.so(\.[0-9]+)*)|([A-Za-z0-9._+-]+\.dll)|([A-Za-z0-9._+-]+\.dylib)' | \
+        sort -u | head -n 20 | while IFS= read -r ref; do
+          [ -n "$ref" ] && echo "$(basename "$scan_root") -> $ref" >> "$reference_tmp"
+        done
+    fi
+  fi
+
+  sort -u "$manifest_tmp" -o "$manifest_tmp"
+  sort -u "$dependency_tmp" -o "$dependency_tmp"
+  sort -u "$library_tmp" -o "$library_tmp"
+  sort -u "$reference_tmp" -o "$reference_tmp"
+
+  manifest_count=$(grep -c . "$manifest_tmp" 2>/dev/null || true)
+  dependency_count=$(grep -c . "$dependency_tmp" 2>/dev/null || true)
+  library_count=$(grep -c . "$library_tmp" 2>/dev/null || true)
+  reference_count=$(grep -c . "$reference_tmp" 2>/dev/null || true)
+
+  cat > "$inventory_file" << EOF
+scan_root=$scan_root
+manifest_files=$manifest_count
+declared_dependencies=$dependency_count
+bundled_libraries=$library_count
+binary_library_references=$reference_count
+
+## Manifest Files
+EOF
+
+  if [ "$manifest_count" -gt 0 ]; then
+    sed 's/^/MANIFEST /' "$manifest_tmp" >> "$inventory_file"
+  else
+    echo "MANIFEST none" >> "$inventory_file"
+  fi
+
+  cat >> "$inventory_file" << 'EOF'
+
+## Declared Dependencies
+EOF
+
+  if [ "$dependency_count" -gt 0 ]; then
+    sed 's/^/DEPENDENCY /' "$dependency_tmp" | head -n 200 >> "$inventory_file"
+  else
+    echo "DEPENDENCY none" >> "$inventory_file"
+  fi
+
+  cat >> "$inventory_file" << 'EOF'
+
+## Bundled Libraries
+EOF
+
+  if [ "$library_count" -gt 0 ]; then
+    sed 's/^/LIBRARY /' "$library_tmp" | head -n 200 >> "$inventory_file"
+  else
+    echo "LIBRARY none" >> "$inventory_file"
+  fi
+
+  cat >> "$inventory_file" << 'EOF'
+
+## Binary References
+EOF
+
+  if [ "$reference_count" -gt 0 ]; then
+    sed 's/^/BINARY_REF /' "$reference_tmp" | head -n 200 >> "$inventory_file"
+  else
+    echo "BINARY_REF none" >> "$inventory_file"
+  fi
+
+  rm -f "$manifest_tmp" "$dependency_tmp" "$library_tmp" "$reference_tmp"
+  log "SUCCESS" "依賴盤點已生成: $inventory_file"
+}
+
+perform_dynamic_analysis() {
+  log "INFO" "步驟6：執行動態分析預檢"
+
+  local dynamic_dir="$WORK_DIR/dynamic-analysis"
+  local base_name=$(basename "$FIRMWARE_FILE")
+  local dynamic_file="$dynamic_dir/${base_name}_dynamic_analysis_$DATE_TAG.txt"
+  local scan_root="$SCAN_TARGET"
+  local service_tmp
+  local indicator_tmp
+  local probe_tmp
+  local service_count=0
+  local script_count=0
+  local indicator_count=0
+  local safe_probe_count=0
+
+  service_tmp=$(mktemp)
+  indicator_tmp=$(mktemp)
+  probe_tmp=$(mktemp)
+
+  if [ -d "$scan_root" ]; then
+    while IFS= read -r candidate; do
+      [ -z "$candidate" ] && continue
+      echo "${candidate#$scan_root/}" >> "$service_tmp"
+
+      grep -I -n -E 'ExecStart|ExecStartPre|ExecStartPost|ProgramArguments|Program|RunAtLoad|KeepAlive|systemctl|launchctl|service[[:space:]]+[A-Za-z0-9_.-]+[[:space:]]+start|telnetd|dropbear|sshd|httpd|nginx|iptables|ip[[:space:]]+link|ifconfig|modprobe|insmod|curl|wget|nc[[:space:]-]' "$candidate" | \
+        head -n 10 | sed "s#^#${candidate#$scan_root/}:#" >> "$indicator_tmp" || true
+    done < <(find "$scan_root" -type f \( \
+      -name "*.service" -o \
+      -name "*.plist" -o \
+      -name "rc.local" -o \
+      -path "*/init.d/*" -o \
+      -name "*.desktop" -o \
+      -name "entrypoint*" -o \
+      -name "launch*" -o \
+      -name "start*" -o \
+      -name "run*" \
+    \) | sort | head -n 50)
+
+    while IFS= read -r script_candidate; do
+      [ -z "$script_candidate" ] && continue
+      script_count=$((script_count + 1))
+
+      case "$script_candidate" in
+        *.sh)
+          if sh -n "$script_candidate" >/dev/null 2>&1; then
+            echo "PROBE ${script_candidate#$scan_root/}: sh -n ok" >> "$probe_tmp"
+          else
+            echo "PROBE ${script_candidate#$scan_root/}: sh -n failed" >> "$probe_tmp"
+          fi
+          safe_probe_count=$((safe_probe_count + 1))
+          ;;
+        *.py)
+          if check_command "python3"; then
+            if python3 -m py_compile "$script_candidate" >/dev/null 2>&1; then
+              echo "PROBE ${script_candidate#$scan_root/}: py_compile ok" >> "$probe_tmp"
+            else
+              echo "PROBE ${script_candidate#$scan_root/}: py_compile failed" >> "$probe_tmp"
+            fi
+            safe_probe_count=$((safe_probe_count + 1))
+          fi
+          ;;
+        *.js)
+          if check_command "node"; then
+            if node --check "$script_candidate" >/dev/null 2>&1; then
+              echo "PROBE ${script_candidate#$scan_root/}: node --check ok" >> "$probe_tmp"
+            else
+              echo "PROBE ${script_candidate#$scan_root/}: node --check failed" >> "$probe_tmp"
+            fi
+            safe_probe_count=$((safe_probe_count + 1))
+          fi
+          ;;
+      esac
+
+      grep -I -n -E 'telnetd|dropbear|sshd|httpd|nginx|systemctl|launchctl|service[[:space:]]+[A-Za-z0-9_.-]+[[:space:]]+start|curl|wget|nc[[:space:]-]|iptables|ip[[:space:]]+link|ifconfig|modprobe|insmod' "$script_candidate" | \
+        head -n 10 | sed "s#^#${script_candidate#$scan_root/}:#" >> "$indicator_tmp" || true
+    done < <(find "$scan_root" -type f \( -name "*.sh" -o -name "*.py" -o -name "*.js" \) | sort | head -n 40)
+  fi
+
+  sort -u "$service_tmp" -o "$service_tmp"
+  sort -u "$indicator_tmp" -o "$indicator_tmp"
+  sort -u "$probe_tmp" -o "$probe_tmp"
+
+  service_count=$(grep -c . "$service_tmp" 2>/dev/null || true)
+  indicator_count=$(grep -c . "$indicator_tmp" 2>/dev/null || true)
+
+  cat > "$dynamic_file" << EOF
+scan_root=$scan_root
+service_files=$service_count
+script_candidates=$script_count
+runtime_indicators=$indicator_count
+safe_probes=$safe_probe_count
+
+## Service And Launch Candidates
+EOF
+
+  if [ "$service_count" -gt 0 ]; then
+    sed 's/^/SERVICE /' "$service_tmp" >> "$dynamic_file"
+  else
+    echo "SERVICE none" >> "$dynamic_file"
+  fi
+
+  cat >> "$dynamic_file" << 'EOF'
+
+## Runtime Indicators
+EOF
+
+  if [ "$indicator_count" -gt 0 ]; then
+    sed 's/^/INDICATOR /' "$indicator_tmp" | head -n 200 >> "$dynamic_file"
+  else
+    echo "INDICATOR none" >> "$dynamic_file"
+  fi
+
+  cat >> "$dynamic_file" << 'EOF'
+
+## Safe Probes
+EOF
+
+  if [ "$safe_probe_count" -gt 0 ]; then
+    cat "$probe_tmp" >> "$dynamic_file"
+  else
+    echo "PROBE none" >> "$dynamic_file"
+  fi
+
+  rm -f "$service_tmp" "$indicator_tmp" "$probe_tmp"
+  log "SUCCESS" "動態分析預檢已生成: $dynamic_file"
+}
+
 # 創建CAN協議日誌
 create_can_log() {
-  log "INFO" "步驟5：創建或更新模擬的CAN協議日誌"
+  log "INFO" "步驟7：創建或更新模擬的CAN協議日誌"
   
   if [ ! -f "$WORK_DIR/can-log-demo.txt" ]; then
     cat > "$WORK_DIR/can-log-demo.txt" << 'EOF'
@@ -396,7 +704,7 @@ EOF
 
 # 創建Ghidra分析筆記
 create_ghidra_notes() {
-  log "INFO" "步驟6：創建或更新Ghidra分析筆記"
+  log "INFO" "步驟8：創建或更新Ghidra分析筆記"
   
   if [ ! -f "$WORK_DIR/ghidra-notes.md" ]; then
     cat > "$WORK_DIR/ghidra-notes.md" << 'EOF'
@@ -429,12 +737,16 @@ EOF
 
 # 創建安全分析報告
 create_security_report() {
-  log "INFO" "步驟7：創建安全分析報告"
+  log "INFO" "步驟9：創建安全分析報告"
   
   local base_name=$(basename "$FIRMWARE_FILE")
+  local dependency_dir="$WORK_DIR/dependency-inventory"
+  local dynamic_dir="$WORK_DIR/dynamic-analysis"
   local hexdump_dir="$WORK_DIR/hexdump-analysis"
   local yara_dir="$WORK_DIR/yara-rules"
   local binwalk_dir="$WORK_DIR/binwalk-analysis"
+  local dependency_file="$dependency_dir/${base_name}_dependency_inventory_$DATE_TAG.txt"
+  local dynamic_file="$dynamic_dir/${base_name}_dynamic_analysis_$DATE_TAG.txt"
   local telnetd_pattern_file="$hexdump_dir/${base_name}_telnetd_pattern_$DATE_TAG.txt"
   local security_pattern_file="$hexdump_dir/${base_name}_security_patterns_$DATE_TAG.txt"
   local telnetd_yara_file="$yara_dir/${base_name}_telnetd_results_$DATE_TAG.txt"
@@ -455,6 +767,16 @@ create_security_report() {
   local dropbear_example=""
   local shadow_example=""
   local binwalk_excerpt=""
+  local dynamic_service_count=0
+  local dynamic_indicator_count=0
+  local dynamic_probe_count=0
+  local dependency_manifest_count=0
+  local dependency_declared_count=0
+  local dependency_library_count=0
+  local dependency_reference_count=0
+  local dynamic_indicator_excerpt=""
+  local dependency_manifest_excerpt=""
+  local dependency_declared_excerpt=""
   
   if check_command "file"; then
     file_type=$(file -b "$FIRMWARE_FILE" 2>/dev/null || echo "未知")
@@ -495,6 +817,22 @@ create_security_report() {
 
   if [ -f "$binwalk_file" ]; then
     binwalk_excerpt=$(grep -v '^[[:space:]]*$' "$binwalk_file" | head -n 8 || true)
+  fi
+
+  if [ -f "$dynamic_file" ]; then
+    dynamic_service_count=$(grep '^service_files=' "$dynamic_file" | cut -d= -f2)
+    dynamic_indicator_count=$(grep '^runtime_indicators=' "$dynamic_file" | cut -d= -f2)
+    dynamic_probe_count=$(grep '^safe_probes=' "$dynamic_file" | cut -d= -f2)
+    dynamic_indicator_excerpt=$(grep '^INDICATOR ' "$dynamic_file" | sed 's/^INDICATOR //' | head -n 3 || true)
+  fi
+
+  if [ -f "$dependency_file" ]; then
+    dependency_manifest_count=$(grep '^manifest_files=' "$dependency_file" | cut -d= -f2)
+    dependency_declared_count=$(grep '^declared_dependencies=' "$dependency_file" | cut -d= -f2)
+    dependency_library_count=$(grep '^bundled_libraries=' "$dependency_file" | cut -d= -f2)
+    dependency_reference_count=$(grep '^binary_library_references=' "$dependency_file" | cut -d= -f2)
+    dependency_manifest_excerpt=$(grep '^MANIFEST ' "$dependency_file" | sed 's/^MANIFEST //' | head -n 3 || true)
+    dependency_declared_excerpt=$(grep '^DEPENDENCY ' "$dependency_file" | sed 's/^DEPENDENCY //' | head -n 5 || true)
   fi
 
   cat > "$REPORT_FILE" << EOF
@@ -546,6 +884,16 @@ EOF
 
   if [ "$PE_SECURITY_SUMMARY" != "不適用" ]; then
     echo "- PE 安全旗標: ${PE_SECURITY_SUMMARY}" >> "$REPORT_FILE"
+    evidence_count=$((evidence_count + 1))
+  fi
+
+  if [ -f "$dynamic_file" ]; then
+    echo "- 動態分析預檢識別 ${dynamic_service_count:-0} 個啟動/服務檔、${dynamic_indicator_count:-0} 個行為指標，執行 ${dynamic_probe_count:-0} 次安全探針。" >> "$REPORT_FILE"
+    evidence_count=$((evidence_count + 1))
+  fi
+
+  if [ -f "$dependency_file" ]; then
+    echo "- 依賴盤點識別 ${dependency_manifest_count:-0} 份 manifest、${dependency_declared_count:-0} 個宣告依賴、${dependency_library_count:-0} 個打包函式庫，以及 ${dependency_reference_count:-0} 個二進位函式庫引用。" >> "$REPORT_FILE"
     evidence_count=$((evidence_count + 1))
   fi
 
@@ -634,7 +982,41 @@ EOF
   fi
 
   if [ $recommendation_count -eq 0 ]; then
-    echo "- 建議搭配動態分析、依賴盤點與人工逆向確認結果。" >> "$REPORT_FILE"
+    echo "- 建議擴大樣本覆蓋，並結合人工逆向與供應鏈來源驗證。" >> "$REPORT_FILE"
+  fi
+
+  echo "" >> "$REPORT_FILE"
+  echo "## 動態分析摘要" >> "$REPORT_FILE"
+
+  if [ -f "$dynamic_file" ]; then
+    echo "- 啟動/服務候選: ${dynamic_service_count:-0}" >> "$REPORT_FILE"
+    echo "- 行為指標: ${dynamic_indicator_count:-0}" >> "$REPORT_FILE"
+    echo "- 安全探針: ${dynamic_probe_count:-0}" >> "$REPORT_FILE"
+    if [ -n "$dynamic_indicator_excerpt" ]; then
+      echo '```text' >> "$REPORT_FILE"
+      printf '%s\n' "$dynamic_indicator_excerpt" >> "$REPORT_FILE"
+      echo '```' >> "$REPORT_FILE"
+    fi
+  else
+    echo "- 本次未生成動態分析摘要。" >> "$REPORT_FILE"
+  fi
+
+  echo "" >> "$REPORT_FILE"
+  echo "## 依賴盤點摘要" >> "$REPORT_FILE"
+
+  if [ -f "$dependency_file" ]; then
+    echo "- Manifest 檔案: ${dependency_manifest_count:-0}" >> "$REPORT_FILE"
+    echo "- 宣告依賴: ${dependency_declared_count:-0}" >> "$REPORT_FILE"
+    echo "- 打包函式庫: ${dependency_library_count:-0}" >> "$REPORT_FILE"
+    echo "- 二進位函式庫引用: ${dependency_reference_count:-0}" >> "$REPORT_FILE"
+    if [ -n "$dependency_manifest_excerpt" ] || [ -n "$dependency_declared_excerpt" ]; then
+      echo '```text' >> "$REPORT_FILE"
+      [ -n "$dependency_manifest_excerpt" ] && printf 'Manifest:\n%s\n' "$dependency_manifest_excerpt" >> "$REPORT_FILE"
+      [ -n "$dependency_declared_excerpt" ] && printf 'Dependencies:\n%s\n' "$dependency_declared_excerpt" >> "$REPORT_FILE"
+      echo '```' >> "$REPORT_FILE"
+    fi
+  else
+    echo "- 本次未生成依賴盤點摘要。" >> "$REPORT_FILE"
   fi
 
   echo "" >> "$REPORT_FILE"
@@ -688,7 +1070,7 @@ EOF
 
 # 創建截圖說明
 create_screenshot_readme() {
-  log "INFO" "步驟8：創建或更新截圖說明"
+  log "INFO" "步驟10：創建或更新截圖說明"
   
   if [ ! -f "$WORK_DIR/screenshots/README.txt" ]; then
     cat > "$WORK_DIR/screenshots/README.txt" << 'EOF'
@@ -721,6 +1103,8 @@ check_directory_structure() {
   local REQUIRED_FILES=(
     "$FIRMWARE_FILE"
     "$WORK_DIR/binwalk-analysis"
+    "$WORK_DIR/dependency-inventory"
+    "$WORK_DIR/dynamic-analysis"
     "$WORK_DIR/hexdump-analysis/full_dump.txt"
     "$WORK_DIR/yara-rules/telnetd_rule.yar"
     "$WORK_DIR/yara-rules/network_services_rule.yar"
@@ -980,6 +1364,8 @@ analyze_single_file() {
     perform_hexdump_analysis
     run_yara_rules
     run_binwalk_analysis
+    generate_dependency_inventory
+    perform_dynamic_analysis
     create_security_report
   fi
   

@@ -1389,7 +1389,7 @@ get_yara_category() {
     MALW_Emotet|crime_emotet|Windows_Trojan_Emotet|mal_qbot_*|Windows_Trojan_Qbot)
       echo "殭屍網路與載入程式 (Botnet & Loader)"
       ;;
-    Windows_Trojan_Generic|Linux_Trojan_Generic|macOS_Trojan_Generic|Windows_Trojan_Trickbot|Windows_PUP_Generic)
+    Windows_Trojan_Generic|Linux_Trojan_Generic|macOS_Trojan_Generic|Windows_Trojan_Trickbot|Windows_PUP_Generic|simplycodes)
       echo "通用惡意軟體與特洛伊木馬 (General Malware & Trojans)"
       ;;
     *)

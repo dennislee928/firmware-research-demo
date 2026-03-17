@@ -70,6 +70,10 @@ firmware-analysis-demo/
 | Docker  | 環境容器化與部署      |
 | Cron    | 自動化定期執行分析    |
 
+### 惡意程式樣本來源與 YARA 測試
+
+本專案 YARA 規則已針對 **MalwareBazaar、VX-Underground、MalShare、VirusShare、theZoo、Malware-Database** 等六大開源樣本來源常見家族進行擴充。若要了解各來源特點、依測試需求選擇來源，以及規則與來源對應，請見 [惡意程式樣本來源與 YARA 測試建議](docs/malware-sample-sources.md)。更新規則請執行：`./pull_yara_rules.sh`。
+
 ## 🔬 實作過程
 
 ### ✅ 步驟 1：使用 binwalk 解包韌體

@@ -69,11 +69,15 @@ RUN mkdir -p /firmware-analysis/binwalk-analysis \
     /firmware-analysis/logs
 
 # Copy scripts
-COPY firmware_analyzer.sh setup_cron.sh README.md /firmware-analysis/
-RUN chmod +x /firmware-analysis/firmware_analyzer.sh /firmware-analysis/setup_cron.sh
+COPY firmware_analyzer.sh setup_cron.sh pull_yara_rules.sh README.md /firmware-analysis/
+RUN chmod +x /firmware-analysis/firmware_analyzer.sh /firmware-analysis/setup_cron.sh /firmware-analysis/pull_yara_rules.sh
 
-# Copy YARA rules
+# Copy YARA rules (baseline), then fetch full set for MalwareBazaar/VirusShare/theZoo etc.
 COPY yara-rules/ /firmware-analysis/yara-rules/
+RUN PROJECT_DIR=/firmware-analysis /firmware-analysis/pull_yara_rules.sh
+
+# Copy docs (malware sample sources and YARA testing guide)
+COPY docs/ /firmware-analysis/docs/
 
 # Copy webapp from builder
 COPY --from=builder /app/webapp /firmware-analysis/webapp

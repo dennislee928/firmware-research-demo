@@ -1677,15 +1677,18 @@ EOF
   fi
 
   # 根據 YARA 命中動態添加風險
-  for rule in "${!YARA_HITS[@]}"; do
-    if [ $risk_count -eq 0 ]; then
-      echo "| 項目 | 風險等級 | 依據 |" >> "$REPORT_FILE"
-      echo "|------|----------|------|" >> "$REPORT_FILE"
-    fi
-    local category=$(get_yara_category "$rule")
-    echo "| YARA: $rule | 高 | 屬於 [$category] 分類，發現具體惡意特徵或敏感服務 |" >> "$REPORT_FILE"
-    risk_count=$((risk_count + 1))
-  done
+  if [ -n "$YARA_HITS_LIST" ]; then
+    echo "$YARA_HITS_LIST" | while IFS='|' read -r rule hits; do
+      [ -z "$rule" ] && continue
+      if [ $risk_count -eq 0 ]; then
+        echo "| 項目 | 風險等級 | 依據 |" >> "$REPORT_FILE"
+        echo "|------|----------|------|" >> "$REPORT_FILE"
+      fi
+      local category=$(get_yara_category "$rule")
+      echo "| YARA: $rule | 高 | 屬於 [$category] 分類，發現具體惡意特徵或敏感服務 |" >> "$REPORT_FILE"
+      risk_count=$((risk_count + 1))
+    done
+  fi
 
   if [ $dropbear_found -eq 1 ]; then
     if [ $risk_count -eq 0 ]; then
@@ -1730,7 +1733,7 @@ EOF
   echo "" >> "$REPORT_FILE"
   echo "## 緩解建議" >> "$REPORT_FILE"
 
-  if [ $telnetd_found -eq 1 ] || [[ -n "${YARA_HITS['telnetd_rule']:-}" ]]; then
+  if [ $telnetd_found -eq 1 ] || echo "$YARA_HITS_LIST" | grep -q "^telnetd_rule|"; then
     echo "- 若非必要，停用 telnetd 並改用受管控的 SSH。" >> "$REPORT_FILE"
     recommendation_count=$((recommendation_count + 1))
   fi
@@ -1870,19 +1873,24 @@ EOF
   echo "" >> "$REPORT_FILE"
   echo "## YARA規則檢測結果" >> "$REPORT_FILE"
 
-  if [ ${#YARA_HITS[@]} -eq 0 ]; then
+  if [ -z "$YARA_HITS_LIST" ]; then
     echo "- 本次掃描未命中任何已知的 YARA 安全規則。" >> "$REPORT_FILE"
   else
-    # 按分類展示
-    declare -A CAT_REPORT
-    for rule in "${!YARA_HITS[@]}"; do
-      local cat=$(get_yara_category "$rule")
-      CAT_REPORT["$cat"]="${CAT_REPORT["$cat"]:-}- $rule: 命中 (${YARA_HITS[$rule]} 處)\n"
-    done
+    # 按分類展示 (Bash 3.2 compatible)
+    local cats=$(echo "$YARA_HITS_LIST" | while IFS='|' read -r rule hits; do
+      [ -z "$rule" ] && continue
+      get_yara_category "$rule"
+    done | sort -u)
     
-    for cat in "${!CAT_REPORT[@]}"; do
+    echo "$cats" | while IFS= read -r cat; do
+      [ -z "$cat" ] && continue
       echo "### $cat" >> "$REPORT_FILE"
-      echo -e "${CAT_REPORT[$cat]}" >> "$REPORT_FILE"
+      echo "$YARA_HITS_LIST" | while IFS='|' read -r rule hits; do
+        [ -z "$rule" ] && continue
+        if [ "$(get_yara_category "$rule")" = "$cat" ]; then
+          echo "- $rule: 命中 (${hits} 處)" >> "$REPORT_FILE"
+        fi
+      done
     done
   fi
 

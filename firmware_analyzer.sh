@@ -321,6 +321,7 @@ EOF
 }
 
 # 運行YARA規則
+# 若為 EXE/壓縮檔等已解壓至目錄，除掃描解壓目錄外，一併掃描原始檔，使針對 PE 主體的規則能命中主程式
 run_yara_rules() {
   log "INFO" "步驟3：運行YARA規則 (目標: $SCAN_TARGET)"
   
@@ -331,7 +332,6 @@ run_yara_rules() {
   local yara_dir="$WORK_DIR/yara-rules"
   local base_name=$(basename "$FIRMWARE_FILE")
   
-  # 遍歷所有 .yar 檔案並執行掃描
   for rule_file in "$yara_dir"/*.yar; do
     [ -e "$rule_file" ] || continue
     local rule_name=$(basename "$rule_file" .yar)
@@ -340,8 +340,15 @@ run_yara_rules() {
     log "INFO" "正在掃描規則: $rule_name"
     : > "$result_file"
     
-    if ! yara -r "$rule_file" "$SCAN_TARGET" > "$result_file" 2>/dev/null; then
-      log "WARNING" "規則 $rule_name 執行失敗"
+    if [ -d "$SCAN_TARGET" ] && [ -f "$FIRMWARE_FILE" ] && [ "$FIRMWARE_FILE" != "$SCAN_TARGET" ]; then
+      # 已解壓：同時掃描原始檔與解壓目錄，讓 PE 型規則有機會命中主程式
+      if ! yara -r "$rule_file" "$FIRMWARE_FILE" "$SCAN_TARGET" > "$result_file" 2>/dev/null; then
+        log "WARNING" "規則 $rule_name 執行失敗"
+      fi
+    else
+      if ! yara -r "$rule_file" "$SCAN_TARGET" > "$result_file" 2>/dev/null; then
+        log "WARNING" "規則 $rule_name 執行失敗"
+      fi
     fi
   done
   

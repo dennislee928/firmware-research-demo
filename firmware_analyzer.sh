@@ -894,7 +894,7 @@ binary_exts = {".exe", ".dll", ".so", ".dylib", ".a", ".jar", ".bin", ".elf", ".
 script_exts = {".sh", ".py", ".pl", ".rb", ".js", ".bat", ".cmd", ".ps1", ".lua"}
 service_tokens = ("service", "launch", "startup", "start", "run", "daemon", "agent", "init", "entrypoint")
 update_tokens = ("update", "upgrade", "installer", "install", "flash", "recovery", "firmware", "driver")
-url_pattern = re.compile(r'https?://[A-Za-z0-9._~:/?#\\[\\]@!$&\'()*+,;=%-]+')
+url_pattern = re.compile(r"https?://[^\\s\"'<>]+")
 
 
 def iter_files(root):
@@ -1037,7 +1037,7 @@ scan_root = os.environ.get("SCAN_TARGET_ENV", "")
 signature_status = os.environ.get("SIGNATURE_STATUS_ENV", "not_applicable")
 signature_summary = os.environ.get("SIGNATURE_SUMMARY_ENV", "不適用")
 
-url_pattern = re.compile(r'https?://[A-Za-z0-9._~:/?#\\[\\]@!$&\'()*+,;=%-]+')
+url_pattern = re.compile(r"https?://[^\\s\"'<>]+")
 cert_exts = {".pem", ".crt", ".cer", ".der", ".p7b", ".p12", ".pfx", ".key"}
 manifest_names = {"package.json", "composer.json", "Cargo.toml", "go.mod", "Info.plist", "pyproject.toml"}
 update_tokens = ("update", "upgrade", "installer", "install", "flash", "recovery", "driver", "agent")

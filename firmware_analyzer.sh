@@ -1374,7 +1374,7 @@ get_yara_category() {
     APT_Equation|spy_equation_fiveeyes|apt_venom_linux_rootkit|lojax)
       echo "韌體持久化與根檢測 (Firmware Persistence & Rootkits)"
       ;;
-    apt_waterbear|apt_plead_downloader|gen_tscookie_rat|apt_blackenergy|apt_fancybear_dnc|apt_blacktech|apt_volt_typhoon)
+    apt_waterbear|apt_plead_downloader|gen_tscookie_rat|apt_blackenergy|apt_fancybear_dnc|apt_blacktech|apt_volt_typhoon|agent_tesla)
       echo "高級持續性威脅工具 (APT Toolsets)"
       ;;
     apt_vpnfilter|Linux_Trojan_Mirai)

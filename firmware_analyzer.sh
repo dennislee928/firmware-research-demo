@@ -469,7 +469,7 @@ EOF
       -name "*.so" -o -name "*.so.*" -o -name "*.dll" -o -name "*.dylib" -o -name "*.a" -o -name "*.jar" \
     \) | sed "s#^$scan_root/##" | sort -u > "$library_tmp" || true
 
-    if check_command "strings"; then
+    if command -v strings >/dev/null 2>&1; then
       while IFS= read -r candidate; do
         [ -z "$candidate" ] && continue
         strings -a "$candidate" 2>/dev/null | \
@@ -478,15 +478,28 @@ EOF
             [ -n "$ref" ] && echo "${candidate#$scan_root/} -> $ref" >> "$reference_tmp"
           done
       done < <(find "$scan_root" -type f | head -n 40)
+    else
+      while IFS= read -r candidate; do
+        [ -z "$candidate" ] && continue
+        grep -aEo '([A-Za-z0-9._+-]+\.so(\.[0-9]+)*)|([A-Za-z0-9._+-]+\.dll)|([A-Za-z0-9._+-]+\.dylib)' "$candidate" | \
+          sort -u | head -n 20 | while IFS= read -r ref; do
+            [ -n "$ref" ] && echo "${candidate#$scan_root/} -> $ref" >> "$reference_tmp"
+          done
+      done < <(find "$scan_root" -type f | head -n 20)
     fi
   else
     if [[ "$scan_root" == *.so ]] || [[ "$scan_root" == *.dll ]] || [[ "$scan_root" == *.dylib ]] || [[ "$scan_root" == *.jar ]]; then
       echo "$(basename "$scan_root")" > "$library_tmp"
     fi
 
-    if check_command "strings"; then
+    if command -v strings >/dev/null 2>&1; then
       strings -a "$scan_root" 2>/dev/null | \
         grep -Eo '([A-Za-z0-9._+-]+\.so(\.[0-9]+)*)|([A-Za-z0-9._+-]+\.dll)|([A-Za-z0-9._+-]+\.dylib)' | \
+        sort -u | head -n 20 | while IFS= read -r ref; do
+          [ -n "$ref" ] && echo "$(basename "$scan_root") -> $ref" >> "$reference_tmp"
+        done
+    else
+      grep -aEo '([A-Za-z0-9._+-]+\.so(\.[0-9]+)*)|([A-Za-z0-9._+-]+\.dll)|([A-Za-z0-9._+-]+\.dylib)' "$scan_root" | \
         sort -u | head -n 20 | while IFS= read -r ref; do
           [ -n "$ref" ] && echo "$(basename "$scan_root") -> $ref" >> "$reference_tmp"
         done
@@ -823,7 +836,7 @@ create_security_report() {
     dynamic_service_count=$(grep '^service_files=' "$dynamic_file" | cut -d= -f2)
     dynamic_indicator_count=$(grep '^runtime_indicators=' "$dynamic_file" | cut -d= -f2)
     dynamic_probe_count=$(grep '^safe_probes=' "$dynamic_file" | cut -d= -f2)
-    dynamic_indicator_excerpt=$(grep '^INDICATOR ' "$dynamic_file" | sed 's/^INDICATOR //' | head -n 3 || true)
+    dynamic_indicator_excerpt=$(grep '^INDICATOR ' "$dynamic_file" | sed 's/^INDICATOR //' | grep -v '^none$' | head -n 3 || true)
   fi
 
   if [ -f "$dependency_file" ]; then
@@ -831,8 +844,8 @@ create_security_report() {
     dependency_declared_count=$(grep '^declared_dependencies=' "$dependency_file" | cut -d= -f2)
     dependency_library_count=$(grep '^bundled_libraries=' "$dependency_file" | cut -d= -f2)
     dependency_reference_count=$(grep '^binary_library_references=' "$dependency_file" | cut -d= -f2)
-    dependency_manifest_excerpt=$(grep '^MANIFEST ' "$dependency_file" | sed 's/^MANIFEST //' | head -n 3 || true)
-    dependency_declared_excerpt=$(grep '^DEPENDENCY ' "$dependency_file" | sed 's/^DEPENDENCY //' | head -n 5 || true)
+    dependency_manifest_excerpt=$(grep '^MANIFEST ' "$dependency_file" | sed 's/^MANIFEST //' | grep -v '^none$' | head -n 3 || true)
+    dependency_declared_excerpt=$(grep '^DEPENDENCY ' "$dependency_file" | sed 's/^DEPENDENCY //' | grep -v '^none$' | head -n 5 || true)
   fi
 
   cat > "$REPORT_FILE" << EOF
@@ -1059,7 +1072,7 @@ EOF
   if [ $risk_count -gt 0 ]; then
     echo "此報告僅列出本次自動化流程實際命中的證據與風險，未再填入示範用模板內容。" >> "$REPORT_FILE"
   else
-    echo "本次自動化檢查未命中高信心風險訊號，但這不代表檔案安全；仍建議結合人工審查與動態分析。" >> "$REPORT_FILE"
+    echo "本次自動化檢查未命中高信心風險訊號，但這不代表檔案安全；仍建議結合人工審查與隔離執行驗證。" >> "$REPORT_FILE"
   fi
 
   # 同步到標準的報告文件

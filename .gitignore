@@ -22,7 +22,15 @@ yarn-error.log*
 
 # 忽略韌體樣本和分析產生的大型檔案
 firmware_samples/*.bin
+firmware_samples/*.dmg
+firmware_samples/*.exe
+firmware_samples/*.iso
+firmware_samples/*.msi
+firmware_samples/*.pkg
+firmware_samples/*.zip
 *.core
+dependency-inventory/*.txt
+dynamic-analysis/*.txt
 hexdump-analysis/*.txt
 binwalk-analysis/*/
 binwalk-analysis/*.txt

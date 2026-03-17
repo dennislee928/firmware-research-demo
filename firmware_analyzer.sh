@@ -1380,7 +1380,7 @@ get_yara_category() {
     apt_vpnfilter|Linux_Trojan_Mirai)
       echo "IoT 與路由器惡意軟體 (IoT & Router Malware)"
       ;;
-    Windows_Trojan_Generic|Linux_Trojan_Generic|macOS_Trojan_Generic|Windows_Trojan_Trickbot)
+    Windows_Trojan_Generic|Linux_Trojan_Generic|macOS_Trojan_Generic|Windows_Trojan_Trickbot|Windows_PUP_Generic)
       echo "通用惡意軟體與特洛伊木馬 (General Malware & Trojans)"
       ;;
     *)
@@ -1422,6 +1422,10 @@ create_security_report() {
   # YARA 命中跟蹤
   local YARA_HITS_LIST=""
   local total_yara_hits=0
+  local YARA_TOOL_MISSING=0
+  if ! command -v yara &> /dev/null; then
+    YARA_TOOL_MISSING=1
+  fi
 
   local telnetd_found=0
   local dropbear_found=0
@@ -1873,7 +1877,9 @@ EOF
   echo "" >> "$REPORT_FILE"
   echo "## YARA規則檢測結果" >> "$REPORT_FILE"
 
-  if [ -z "$YARA_HITS_LIST" ]; then
+  if [ "$YARA_TOOL_MISSING" -eq 1 ]; then
+    echo "- **警告: 未安裝 YARA 工具，跳過掃描。**" >> "$REPORT_FILE"
+  elif [ -z "$YARA_HITS_LIST" ]; then
     echo "- 本次掃描未命中任何已知的 YARA 安全規則。" >> "$REPORT_FILE"
   else
     # 按分類展示 (Bash 3.2 compatible)

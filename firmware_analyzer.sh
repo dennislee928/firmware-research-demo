@@ -1420,7 +1420,7 @@ create_security_report() {
   local recommendation_count=0
   
   # YARA 命中跟蹤
-  declare -A YARA_HITS
+  local YARA_HITS_LIST=""
   local total_yara_hits=0
 
   local telnetd_found=0
@@ -1502,7 +1502,8 @@ create_security_report() {
       rule_filename=${rule_filename#${base_name}_}
       local hits=$(grep -v '^$' "$result_file" | wc -l | awk '{print $1}')
       if [ "$hits" -gt 0 ]; then
-        YARA_HITS["$rule_filename"]=$hits
+        YARA_HITS_LIST="${YARA_HITS_LIST}${rule_filename}|${hits}
+"
         total_yara_hits=$((total_yara_hits + hits))
       fi
     fi

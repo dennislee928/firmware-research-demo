@@ -1898,6 +1898,9 @@ EOF
     echo "- **警告: 未安裝 YARA 工具，跳過掃描。**" >> "$REPORT_FILE"
   elif [ -z "$YARA_HITS_LIST" ]; then
     echo "- 本次掃描未命中任何已知的 YARA 安全規則。" >> "$REPORT_FILE"
+    if [ -n "$supply_source_sha" ] && [ "$supply_source_sha" != "unavailable" ]; then
+      echo "- **建議**: 若此樣本來自 MalwareBazaar，可至 [bazaar.abuse.ch](https://bazaar.abuse.ch/) 以 SHA-256 \`${supply_source_sha}\` 查詢樣本 **tag**（惡意程式家族），並依 tag 於 Yara-Rules/Neo23x0/Elastic 等來源加入對應規則後執行 \`./pull_yara_rules.sh\` 並重新分析。" >> "$REPORT_FILE"
+    fi
   else
     # 按分類展示 (Bash 3.2 compatible)
     local cats=$(echo "$YARA_HITS_LIST" | while IFS='|' read -r rule hits; do

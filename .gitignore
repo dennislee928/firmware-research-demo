@@ -34,6 +34,7 @@ dynamic-analysis/*.txt
 hexdump-analysis/*.txt
 binwalk-analysis/*/
 binwalk-analysis/*.txt
+yara-rules/*_results_*.txt
 reports/*.md
 
 # 忽略Docker生成的文件

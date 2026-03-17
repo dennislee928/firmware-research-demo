@@ -11,6 +11,9 @@ services:
       - ./dependency-inventory:/firmware-analysis/dependency-inventory:rw
       - ./dynamic-analysis:/firmware-analysis/dynamic-analysis:rw
       - ./hexdump-analysis:/firmware-analysis/hexdump-analysis:rw
+      - ./sample-coverage:/firmware-analysis/sample-coverage:rw
+      - ./reverse-engineering-hints:/firmware-analysis/reverse-engineering-hints:rw
+      - ./supply-chain-verification:/firmware-analysis/supply-chain-verification:rw
       - ./yara-rules:/firmware-analysis/yara-rules:rw
       - ./screenshots:/firmware-analysis/screenshots:rw
       - ./reports:/firmware-analysis/reports:rw
@@ -18,11 +21,12 @@ services:
     # We do NOT mount the webapp folder anymore during production to avoid overwriting node_modules
     # If you are developing the UI, uncomment the line below:
     # - ./webapp:/firmware-analysis/webapp:rw
-    tty: true
+    init: true
     environment:
       - TZ=Asia/Taipei
       - ANALYSIS_INTERVAL=30 # Minutes
       - NODE_ENV=production
+      - MAX_UPLOAD_BYTES=2147483648
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://0.0.0.0:3000"]

@@ -9,6 +9,9 @@ export default function Home() {
     { id: "yara-rules", label: "YARA 規則" },
     { id: "dynamic-analysis", label: "動態分析" },
     { id: "dependency-inventory", label: "依賴盤點" },
+    { id: "sample-coverage", label: "樣本覆蓋" },
+    { id: "reverse-engineering-hints", label: "逆向提示" },
+    { id: "supply-chain-verification", label: "供應鏈來源" },
   ];
 
   const [file, setFile] = useState(null);
@@ -171,6 +174,7 @@ export default function Home() {
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">韌體檔案 (.bin, .img, .fw, .pkg, .dmg, .iso, .zip, .7z, .tar, .gz, .exe, .msi)</label>
                   <input type="file" onChange={handleFileChange} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
+                  <p className="mt-1 text-[11px] text-gray-400">單檔上傳上限由後端配置控制，預設為 2GB。</p>
                 </div>
 
                 <div>
@@ -250,7 +254,7 @@ export default function Home() {
             {/* Artifacts Explorer */}
             <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-bold text-gray-800 mb-4">檔案檢索與結果庫</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8 gap-6">
                 {artifactFolders.map((folder) => (
                   <div key={folder.id}>
                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">{folder.label}</h3>

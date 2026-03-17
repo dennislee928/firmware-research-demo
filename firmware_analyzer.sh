@@ -1358,22 +1358,30 @@ EOF
 
 # 創建安全分析報告
 create_security_report() {
-  log "INFO" "步驟9：創建安全分析報告"
-  
-  local base_name=$(basename "$FIRMWARE_FILE")
+  log "INFO" "步驟10：創建安全分析報告"
+
+  local base_name
+  base_name=$(basename "$FIRMWARE_FILE")
   local dependency_dir="$WORK_DIR/dependency-inventory"
   local dynamic_dir="$WORK_DIR/dynamic-analysis"
+  local coverage_dir="$WORK_DIR/sample-coverage"
+  local reverse_dir="$WORK_DIR/reverse-engineering-hints"
+  local supply_dir="$WORK_DIR/supply-chain-verification"
   local hexdump_dir="$WORK_DIR/hexdump-analysis"
   local yara_dir="$WORK_DIR/yara-rules"
   local binwalk_dir="$WORK_DIR/binwalk-analysis"
   local dependency_file="$dependency_dir/${base_name}_dependency_inventory_$DATE_TAG.txt"
   local dynamic_file="$dynamic_dir/${base_name}_dynamic_analysis_$DATE_TAG.txt"
+  local coverage_file="$coverage_dir/${base_name}_sample_coverage_$DATE_TAG.txt"
+  local reverse_file="$reverse_dir/${base_name}_reverse_hints_$DATE_TAG.txt"
+  local supply_file="$supply_dir/${base_name}_supply_chain_$DATE_TAG.txt"
   local telnetd_pattern_file="$hexdump_dir/${base_name}_telnetd_pattern_$DATE_TAG.txt"
   local security_pattern_file="$hexdump_dir/${base_name}_security_patterns_$DATE_TAG.txt"
   local telnetd_yara_file="$yara_dir/${base_name}_telnetd_results_$DATE_TAG.txt"
   local network_yara_file="$yara_dir/${base_name}_network_services_results_$DATE_TAG.txt"
   local binwalk_file="$binwalk_dir/${base_name}_binwalk_results_$DATE_TAG.txt"
-  local file_size="$(du -h "$FIRMWARE_FILE" | cut -f1)"
+  local file_size
+  file_size="$(du -h "$FIRMWARE_FILE" | cut -f1)"
   local file_type="未知"
   local scan_target_description="原始檔案"
   local evidence_count=0
@@ -1395,10 +1403,34 @@ create_security_report() {
   local dependency_declared_count=0
   local dependency_library_count=0
   local dependency_reference_count=0
+  local coverage_total_files=0
+  local coverage_total_directories=0
+  local coverage_interesting_count=0
+  local reverse_candidate_count=0
+  local reverse_service_count=0
+  local reverse_binary_count=0
+  local reverse_script_count=0
+  local reverse_url_count=0
+  local supply_source_sha="unavailable"
+  local supply_signature_status="not_applicable"
+  local supply_signature_summary="不適用"
+  local supply_certificate_count=0
+  local supply_url_count=0
+  local supply_domain_count=0
+  local supply_manifest_count=0
+  local supply_publisher_count=0
+  local supply_registry_count=0
+  local supply_update_count=0
   local dynamic_indicator_excerpt=""
   local dependency_manifest_excerpt=""
   local dependency_declared_excerpt=""
-  
+  local coverage_candidate_excerpt=""
+  local reverse_candidate_excerpt=""
+  local reverse_url_excerpt=""
+  local supply_publisher_excerpt=""
+  local supply_manifest_excerpt=""
+  local supply_url_excerpt=""
+
   if check_command "file"; then
     file_type=$(file -b "$FIRMWARE_FILE" 2>/dev/null || echo "未知")
   fi
@@ -1417,12 +1449,12 @@ create_security_report() {
     telnetd_found=1
     telnetd_example=$(head -n 1 "$telnetd_pattern_file" | tr -d '\r')
   fi
-  
+
   if [ -s "$security_pattern_file" ] && grep -q "dropbear" "$security_pattern_file" 2>/dev/null; then
     dropbear_found=1
     dropbear_example=$(grep "dropbear" "$security_pattern_file" | head -n 1 | tr -d '\r')
   fi
-  
+
   if [ -s "$security_pattern_file" ] && grep -q "shadow" "$security_pattern_file" 2>/dev/null; then
     shadow_found=1
     shadow_example=$(grep "shadow" "$security_pattern_file" | head -n 1 | tr -d '\r')
@@ -1441,20 +1473,79 @@ create_security_report() {
   fi
 
   if [ -f "$dynamic_file" ]; then
-    dynamic_service_count=$(grep '^service_files=' "$dynamic_file" | cut -d= -f2)
-    dynamic_indicator_count=$(grep '^runtime_indicators=' "$dynamic_file" | cut -d= -f2)
-    dynamic_probe_count=$(grep '^safe_probes=' "$dynamic_file" | cut -d= -f2)
-    dynamic_indicator_excerpt=$(grep '^INDICATOR ' "$dynamic_file" | sed 's/^INDICATOR //' | grep -v '^none$' | head -n 3 || true)
+    dynamic_service_count=$(grep '^service_files=' "$dynamic_file" | cut -d= -f2 || true)
+    dynamic_indicator_count=$(grep '^runtime_indicators=' "$dynamic_file" | cut -d= -f2 || true)
+    dynamic_probe_count=$(grep '^safe_probes=' "$dynamic_file" | cut -d= -f2 || true)
+    dynamic_indicator_excerpt=$(grep '^INDICATOR ' "$dynamic_file" | sed 's/^INDICATOR //' | grep -vi '^[[:space:]]*none[[:space:]]*$' | head -n 3 || true)
   fi
 
   if [ -f "$dependency_file" ]; then
-    dependency_manifest_count=$(grep '^manifest_files=' "$dependency_file" | cut -d= -f2)
-    dependency_declared_count=$(grep '^declared_dependencies=' "$dependency_file" | cut -d= -f2)
-    dependency_library_count=$(grep '^bundled_libraries=' "$dependency_file" | cut -d= -f2)
-    dependency_reference_count=$(grep '^binary_library_references=' "$dependency_file" | cut -d= -f2)
-    dependency_manifest_excerpt=$(grep '^MANIFEST ' "$dependency_file" | sed 's/^MANIFEST //' | grep -v '^none$' | head -n 3 || true)
-    dependency_declared_excerpt=$(grep '^DEPENDENCY ' "$dependency_file" | sed 's/^DEPENDENCY //' | grep -v '^none$' | head -n 5 || true)
+    dependency_manifest_count=$(grep '^manifest_files=' "$dependency_file" | cut -d= -f2 || true)
+    dependency_declared_count=$(grep '^declared_dependencies=' "$dependency_file" | cut -d= -f2 || true)
+    dependency_library_count=$(grep '^bundled_libraries=' "$dependency_file" | cut -d= -f2 || true)
+    dependency_reference_count=$(grep '^binary_library_references=' "$dependency_file" | cut -d= -f2 || true)
+    dependency_manifest_excerpt=$(grep '^MANIFEST ' "$dependency_file" | sed 's/^MANIFEST //' | grep -vi '^[[:space:]]*none[[:space:]]*$' | head -n 3 || true)
+    dependency_declared_excerpt=$(grep '^DEPENDENCY ' "$dependency_file" | sed 's/^DEPENDENCY //' | grep -vi '^[[:space:]]*none[[:space:]]*$' | head -n 5 || true)
   fi
+
+  if [ -f "$coverage_file" ]; then
+    coverage_total_files=$(grep '^total_files=' "$coverage_file" | cut -d= -f2 || true)
+    coverage_total_directories=$(grep '^total_directories=' "$coverage_file" | cut -d= -f2 || true)
+    coverage_interesting_count=$(grep '^interesting_candidates=' "$coverage_file" | cut -d= -f2 || true)
+    coverage_candidate_excerpt=$(grep '^CANDIDATE ' "$coverage_file" | sed 's/^CANDIDATE //' | grep -vi '^[[:space:]]*none[[:space:]]*$' | head -n 4 || true)
+  fi
+
+  if [ -f "$reverse_file" ]; then
+    reverse_candidate_count=$(grep '^candidate_targets=' "$reverse_file" | cut -d= -f2 || true)
+    reverse_service_count=$(grep '^service_targets=' "$reverse_file" | cut -d= -f2 || true)
+    reverse_binary_count=$(grep '^binary_targets=' "$reverse_file" | cut -d= -f2 || true)
+    reverse_script_count=$(grep '^script_targets=' "$reverse_file" | cut -d= -f2 || true)
+    reverse_url_count=$(grep '^url_hints=' "$reverse_file" | cut -d= -f2 || true)
+    reverse_candidate_excerpt=$(grep '^CANDIDATE ' "$reverse_file" | sed 's/^CANDIDATE //' | grep -vi '^[[:space:]]*none[[:space:]]*$' | head -n 4 || true)
+    reverse_url_excerpt=$(grep '^URL ' "$reverse_file" | sed 's/^URL //' | grep -vi '^[[:space:]]*none[[:space:]]*$' | head -n 3 || true)
+  fi
+
+  if [ -f "$supply_file" ]; then
+    supply_source_sha=$(grep '^source_sha256=' "$supply_file" | cut -d= -f2- || true)
+    supply_signature_status=$(grep '^signature_status=' "$supply_file" | cut -d= -f2- || true)
+    supply_signature_summary=$(grep '^signature_summary=' "$supply_file" | cut -d= -f2- || true)
+    supply_certificate_count=$(grep '^certificate_files=' "$supply_file" | cut -d= -f2 || true)
+    supply_url_count=$(grep '^url_references=' "$supply_file" | cut -d= -f2 || true)
+    supply_domain_count=$(grep '^domain_references=' "$supply_file" | cut -d= -f2 || true)
+    supply_manifest_count=$(grep '^manifest_provenance_entries=' "$supply_file" | cut -d= -f2 || true)
+    supply_publisher_count=$(grep '^publisher_hints=' "$supply_file" | cut -d= -f2 || true)
+    supply_registry_count=$(grep '^registry_hints=' "$supply_file" | cut -d= -f2 || true)
+    supply_update_count=$(grep '^update_channel_hints=' "$supply_file" | cut -d= -f2 || true)
+    supply_publisher_excerpt=$(grep '^PUBLISHER ' "$supply_file" | sed 's/^PUBLISHER //' | grep -vi '^[[:space:]]*none[[:space:]]*$' | head -n 3 || true)
+    supply_manifest_excerpt=$(grep '^MANIFEST ' "$supply_file" | sed 's/^MANIFEST //' | grep -vi '^[[:space:]]*none[[:space:]]*$' | head -n 3 || true)
+    supply_url_excerpt=$(grep '^URL ' "$supply_file" | sed 's/^URL //' | grep -vi '^[[:space:]]*none[[:space:]]*$' | head -n 3 || true)
+  fi
+
+  dynamic_service_count=${dynamic_service_count:-0}
+  dynamic_indicator_count=${dynamic_indicator_count:-0}
+  dynamic_probe_count=${dynamic_probe_count:-0}
+  dependency_manifest_count=${dependency_manifest_count:-0}
+  dependency_declared_count=${dependency_declared_count:-0}
+  dependency_library_count=${dependency_library_count:-0}
+  dependency_reference_count=${dependency_reference_count:-0}
+  coverage_total_files=${coverage_total_files:-0}
+  coverage_total_directories=${coverage_total_directories:-0}
+  coverage_interesting_count=${coverage_interesting_count:-0}
+  reverse_candidate_count=${reverse_candidate_count:-0}
+  reverse_service_count=${reverse_service_count:-0}
+  reverse_binary_count=${reverse_binary_count:-0}
+  reverse_script_count=${reverse_script_count:-0}
+  reverse_url_count=${reverse_url_count:-0}
+  supply_certificate_count=${supply_certificate_count:-0}
+  supply_url_count=${supply_url_count:-0}
+  supply_domain_count=${supply_domain_count:-0}
+  supply_manifest_count=${supply_manifest_count:-0}
+  supply_publisher_count=${supply_publisher_count:-0}
+  supply_registry_count=${supply_registry_count:-0}
+  supply_update_count=${supply_update_count:-0}
+  supply_signature_status=${supply_signature_status:-not_applicable}
+  supply_signature_summary=${supply_signature_summary:-不適用}
+  supply_source_sha=${supply_source_sha:-unavailable}
 
   cat > "$REPORT_FILE" << EOF
 # 韌體安全分析報告
@@ -1477,12 +1568,12 @@ EOF
     echo "- 字串掃描命中 telnetd。示例: ${telnetd_example}" >> "$REPORT_FILE"
     evidence_count=$((evidence_count + 1))
   fi
-  
+
   if [ $dropbear_found -eq 1 ]; then
     echo "- 字串掃描命中 dropbear。示例: ${dropbear_example}" >> "$REPORT_FILE"
     evidence_count=$((evidence_count + 1))
   fi
-  
+
   if [ $shadow_found -eq 1 ]; then
     echo "- 字串掃描命中 /etc/shadow。示例: ${shadow_example}" >> "$REPORT_FILE"
     evidence_count=$((evidence_count + 1))
@@ -1509,12 +1600,27 @@ EOF
   fi
 
   if [ -f "$dynamic_file" ]; then
-    echo "- 動態分析預檢識別 ${dynamic_service_count:-0} 個啟動/服務檔、${dynamic_indicator_count:-0} 個行為指標，執行 ${dynamic_probe_count:-0} 次安全探針。" >> "$REPORT_FILE"
+    echo "- 動態分析預檢識別 ${dynamic_service_count} 個啟動/服務檔、${dynamic_indicator_count} 個行為指標，執行 ${dynamic_probe_count} 次安全探針。" >> "$REPORT_FILE"
     evidence_count=$((evidence_count + 1))
   fi
 
   if [ -f "$dependency_file" ]; then
-    echo "- 依賴盤點識別 ${dependency_manifest_count:-0} 份 manifest、${dependency_declared_count:-0} 個宣告依賴、${dependency_library_count:-0} 個打包函式庫，以及 ${dependency_reference_count:-0} 個二進位函式庫引用。" >> "$REPORT_FILE"
+    echo "- 依賴盤點識別 ${dependency_manifest_count} 份 manifest、${dependency_declared_count} 個宣告依賴、${dependency_library_count} 個打包函式庫，以及 ${dependency_reference_count} 個二進位函式庫引用。" >> "$REPORT_FILE"
+    evidence_count=$((evidence_count + 1))
+  fi
+
+  if [ -f "$coverage_file" ]; then
+    echo "- 樣本覆蓋摘要盤點 ${coverage_total_files} 個檔案、${coverage_total_directories} 個目錄，標記 ${coverage_interesting_count} 個高優先候選。" >> "$REPORT_FILE"
+    evidence_count=$((evidence_count + 1))
+  fi
+
+  if [ -f "$reverse_file" ]; then
+    echo "- 人工逆向輔助摘要鎖定 ${reverse_candidate_count} 個候選目標，涵蓋 ${reverse_service_count} 個啟動項、${reverse_binary_count} 個可執行檔與 ${reverse_url_count} 個 URL 線索。" >> "$REPORT_FILE"
+    evidence_count=$((evidence_count + 1))
+  fi
+
+  if [ -f "$supply_file" ]; then
+    echo "- 供應鏈來源檢核整理 ${supply_manifest_count} 筆 manifest 來源、${supply_publisher_count} 筆發行者提示、${supply_url_count} 個來源 URL；簽章狀態為 ${supply_signature_summary}。" >> "$REPORT_FILE"
     evidence_count=$((evidence_count + 1))
   fi
 
@@ -1602,17 +1708,32 @@ EOF
     recommendation_count=$((recommendation_count + 1))
   fi
 
+  if [ -f "$coverage_file" ] && [ "$coverage_interesting_count" -gt 0 ]; then
+    echo "- 先檢查樣本覆蓋摘要中的高優先候選與最大檔案，確認是否仍有巢狀封裝或未展開內容。" >> "$REPORT_FILE"
+    recommendation_count=$((recommendation_count + 1))
+  fi
+
+  if [ -f "$reverse_file" ] && [ "$reverse_candidate_count" -gt 0 ]; then
+    echo "- 依人工逆向輔助摘要優先分析啟動項、更新器與可執行檔，再進入 Ghidra/IDA 驗證關鍵流程。" >> "$REPORT_FILE"
+    recommendation_count=$((recommendation_count + 1))
+  fi
+
+  if [ -f "$supply_file" ]; then
+    echo "- 以供應鏈來源檢核摘要中的 SHA-256、簽章、manifest 與來源 URL，比對官方發佈管道與內部白名單。" >> "$REPORT_FILE"
+    recommendation_count=$((recommendation_count + 1))
+  fi
+
   if [ $recommendation_count -eq 0 ]; then
-    echo "- 建議擴大樣本覆蓋，並結合人工逆向與供應鏈來源驗證。" >> "$REPORT_FILE"
+    echo "- 本次未形成額外緩解建議；請保留原始樣本與分析產物以便後續複驗。" >> "$REPORT_FILE"
   fi
 
   echo "" >> "$REPORT_FILE"
   echo "## 動態分析摘要" >> "$REPORT_FILE"
 
   if [ -f "$dynamic_file" ]; then
-    echo "- 啟動/服務候選: ${dynamic_service_count:-0}" >> "$REPORT_FILE"
-    echo "- 行為指標: ${dynamic_indicator_count:-0}" >> "$REPORT_FILE"
-    echo "- 安全探針: ${dynamic_probe_count:-0}" >> "$REPORT_FILE"
+    echo "- 啟動/服務候選: ${dynamic_service_count}" >> "$REPORT_FILE"
+    echo "- 行為指標: ${dynamic_indicator_count}" >> "$REPORT_FILE"
+    echo "- 安全探針: ${dynamic_probe_count}" >> "$REPORT_FILE"
     if [ -n "$dynamic_indicator_excerpt" ]; then
       echo '```text' >> "$REPORT_FILE"
       printf '%s\n' "$dynamic_indicator_excerpt" >> "$REPORT_FILE"
@@ -1626,10 +1747,10 @@ EOF
   echo "## 依賴盤點摘要" >> "$REPORT_FILE"
 
   if [ -f "$dependency_file" ]; then
-    echo "- Manifest 檔案: ${dependency_manifest_count:-0}" >> "$REPORT_FILE"
-    echo "- 宣告依賴: ${dependency_declared_count:-0}" >> "$REPORT_FILE"
-    echo "- 打包函式庫: ${dependency_library_count:-0}" >> "$REPORT_FILE"
-    echo "- 二進位函式庫引用: ${dependency_reference_count:-0}" >> "$REPORT_FILE"
+    echo "- Manifest 檔案: ${dependency_manifest_count}" >> "$REPORT_FILE"
+    echo "- 宣告依賴: ${dependency_declared_count}" >> "$REPORT_FILE"
+    echo "- 打包函式庫: ${dependency_library_count}" >> "$REPORT_FILE"
+    echo "- 二進位函式庫引用: ${dependency_reference_count}" >> "$REPORT_FILE"
     if [ -n "$dependency_manifest_excerpt" ] || [ -n "$dependency_declared_excerpt" ]; then
       echo '```text' >> "$REPORT_FILE"
       [ -n "$dependency_manifest_excerpt" ] && printf 'Manifest:\n%s\n' "$dependency_manifest_excerpt" >> "$REPORT_FILE"
@@ -1638,6 +1759,65 @@ EOF
     fi
   else
     echo "- 本次未生成依賴盤點摘要。" >> "$REPORT_FILE"
+  fi
+
+  echo "" >> "$REPORT_FILE"
+  echo "## 樣本覆蓋摘要" >> "$REPORT_FILE"
+
+  if [ -f "$coverage_file" ]; then
+    echo "- 檔案總數: ${coverage_total_files}" >> "$REPORT_FILE"
+    echo "- 目錄總數: ${coverage_total_directories}" >> "$REPORT_FILE"
+    echo "- 高優先候選: ${coverage_interesting_count}" >> "$REPORT_FILE"
+    if [ -n "$coverage_candidate_excerpt" ]; then
+      echo '```text' >> "$REPORT_FILE"
+      printf '%s\n' "$coverage_candidate_excerpt" >> "$REPORT_FILE"
+      echo '```' >> "$REPORT_FILE"
+    fi
+  else
+    echo "- 本次未生成樣本覆蓋摘要。" >> "$REPORT_FILE"
+  fi
+
+  echo "" >> "$REPORT_FILE"
+  echo "## 人工逆向輔助摘要" >> "$REPORT_FILE"
+
+  if [ -f "$reverse_file" ]; then
+    echo "- 候選目標: ${reverse_candidate_count}" >> "$REPORT_FILE"
+    echo "- 啟動項: ${reverse_service_count}" >> "$REPORT_FILE"
+    echo "- 可執行檔: ${reverse_binary_count}" >> "$REPORT_FILE"
+    echo "- 腳本: ${reverse_script_count}" >> "$REPORT_FILE"
+    echo "- URL 線索: ${reverse_url_count}" >> "$REPORT_FILE"
+    if [ -n "$reverse_candidate_excerpt" ] || [ -n "$reverse_url_excerpt" ]; then
+      echo '```text' >> "$REPORT_FILE"
+      [ -n "$reverse_candidate_excerpt" ] && printf 'Targets:\n%s\n' "$reverse_candidate_excerpt" >> "$REPORT_FILE"
+      [ -n "$reverse_url_excerpt" ] && printf 'URLs:\n%s\n' "$reverse_url_excerpt" >> "$REPORT_FILE"
+      echo '```' >> "$REPORT_FILE"
+    fi
+  else
+    echo "- 本次未生成人工逆向輔助摘要。" >> "$REPORT_FILE"
+  fi
+
+  echo "" >> "$REPORT_FILE"
+  echo "## 供應鏈來源檢核摘要" >> "$REPORT_FILE"
+
+  if [ -f "$supply_file" ]; then
+    echo "- SHA-256: ${supply_source_sha}" >> "$REPORT_FILE"
+    echo "- 簽章狀態: ${supply_signature_summary}" >> "$REPORT_FILE"
+    echo "- 憑證檔案: ${supply_certificate_count}" >> "$REPORT_FILE"
+    echo "- 來源 URL: ${supply_url_count}" >> "$REPORT_FILE"
+    echo "- 來源網域: ${supply_domain_count}" >> "$REPORT_FILE"
+    echo "- Manifest 來源欄位: ${supply_manifest_count}" >> "$REPORT_FILE"
+    echo "- 發行者提示: ${supply_publisher_count}" >> "$REPORT_FILE"
+    echo "- 套件註冊表提示: ${supply_registry_count}" >> "$REPORT_FILE"
+    echo "- 更新通道提示: ${supply_update_count}" >> "$REPORT_FILE"
+    if [ -n "$supply_publisher_excerpt" ] || [ -n "$supply_manifest_excerpt" ] || [ -n "$supply_url_excerpt" ]; then
+      echo '```text' >> "$REPORT_FILE"
+      [ -n "$supply_publisher_excerpt" ] && printf 'Publisher:\n%s\n' "$supply_publisher_excerpt" >> "$REPORT_FILE"
+      [ -n "$supply_manifest_excerpt" ] && printf 'Manifest:\n%s\n' "$supply_manifest_excerpt" >> "$REPORT_FILE"
+      [ -n "$supply_url_excerpt" ] && printf 'URLs:\n%s\n' "$supply_url_excerpt" >> "$REPORT_FILE"
+      echo '```' >> "$REPORT_FILE"
+    fi
+  else
+    echo "- 本次未生成供應鏈來源檢核摘要。" >> "$REPORT_FILE"
   fi
 
   echo "" >> "$REPORT_FILE"
@@ -1678,20 +1858,18 @@ EOF
   echo "## 結論" >> "$REPORT_FILE"
 
   if [ $risk_count -gt 0 ]; then
-    echo "此報告僅列出本次自動化流程實際命中的證據與風險，未再填入示範用模板內容。" >> "$REPORT_FILE"
+    echo "此報告僅列出本次自動化流程實際命中的證據與風險，並補充樣本覆蓋、人工逆向與供應鏈來源線索。" >> "$REPORT_FILE"
   else
-    echo "本次自動化檢查未命中高信心風險訊號，但這不代表檔案安全；仍建議結合人工審查與隔離執行驗證。" >> "$REPORT_FILE"
+    echo "本次自動化檢查未命中高信心風險訊號，但已額外整理樣本覆蓋、人工逆向候選與供應鏈來源線索；仍建議在隔離環境完成人工驗證。" >> "$REPORT_FILE"
   fi
 
-  # 同步到標準的報告文件
   cp "$REPORT_FILE" "$WORK_DIR/simulated_report.md"
-  
   log "SUCCESS" "安全分析報告已創建: $REPORT_FILE"
 }
 
 # 創建截圖說明
 create_screenshot_readme() {
-  log "INFO" "步驟10：創建或更新截圖說明"
+  log "INFO" "附加資料：創建或更新截圖說明"
   
   if [ ! -f "$WORK_DIR/screenshots/README.txt" ]; then
     cat > "$WORK_DIR/screenshots/README.txt" << 'EOF'
@@ -1727,6 +1905,9 @@ check_directory_structure() {
     "$WORK_DIR/dependency-inventory"
     "$WORK_DIR/dynamic-analysis"
     "$WORK_DIR/hexdump-analysis/full_dump.txt"
+    "$WORK_DIR/sample-coverage"
+    "$WORK_DIR/reverse-engineering-hints"
+    "$WORK_DIR/supply-chain-verification"
     "$WORK_DIR/yara-rules/telnetd_rule.yar"
     "$WORK_DIR/yara-rules/network_services_rule.yar"
     "$WORK_DIR/ghidra-notes.md"
@@ -1987,6 +2168,9 @@ analyze_single_file() {
     run_binwalk_analysis
     generate_dependency_inventory
     perform_dynamic_analysis
+    generate_sample_coverage
+    generate_reverse_engineering_hints
+    verify_supply_chain_sources
     create_security_report
   fi
   

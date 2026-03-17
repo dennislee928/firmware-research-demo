@@ -32,6 +32,9 @@ firmware_samples/*.zip
 dependency-inventory/*.txt
 dynamic-analysis/*.txt
 hexdump-analysis/*.txt
+sample-coverage/*.txt
+reverse-engineering-hints/*.txt
+supply-chain-verification/*.txt
 binwalk-analysis/*/
 binwalk-analysis/*.txt
 yara-rules/*_results_*.txt

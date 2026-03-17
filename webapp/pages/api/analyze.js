@@ -104,6 +104,10 @@ export default async function handler(req, res) {
   try {
     const jobId = Date.now().toString();
     const { fields, files } = await readFormData(req);
+    const getFieldValue = (val) => {
+      if (Array.isArray(val)) return val[0];
+      return val;
+    };
     
     console.log(`[Job ${jobId}] Received fields:`, JSON.stringify(fields));
     console.log(`[Job ${jobId}] Received files keys:`, Object.keys(files));
@@ -124,26 +128,20 @@ export default async function handler(req, res) {
         });
       }
       args.push("-f", targetPath);
-    } else if (fields.scanDirectory) {
-      targetPath = String(fields.scanDirectory);
+    } else if (getFieldValue(fields.scanDirectory)) {
+      targetPath = String(getFieldValue(fields.scanDirectory));
       // Basic path validation - restrict to ANALYSIS_DIR for safety
       if (!targetPath.startsWith(ANALYSIS_DIR)) {
          return res.status(400).json({ message: "無效的掃描目錄" });
       }
       args.push("-d", targetPath);
       
-      if (fields.fileExtension) {
-        args.push("-e", String(fields.fileExtension));
+      if (getFieldValue(fields.fileExtension)) {
+        args.push("-e", String(getFieldValue(fields.fileExtension)));
       }
     } else {
       return res.status(400).json({ message: "未提供韌體檔案或掃描目錄" });
     }
-
-    // Helper to get field value regardless of it being a string or array
-    const getFieldValue = (val) => {
-      if (Array.isArray(val)) return val[0];
-      return val;
-    };
 
     // Add options
     if (getFieldValue(fields.yaraOnly) === "true") args.push("-y");

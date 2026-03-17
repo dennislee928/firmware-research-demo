@@ -4,7 +4,18 @@ import path from "path";
 export default function handler(req, res) {
   const { action, folder, filename } = req.query;
   const BASE_DIR = "/firmware-analysis";
-  const ALLOWED_FOLDERS = ["hexdump-analysis", "binwalk-analysis", "yara-rules", "dynamic-analysis", "dependency-inventory", "logs", "reports"];
+  const ALLOWED_FOLDERS = [
+    "hexdump-analysis",
+    "binwalk-analysis",
+    "yara-rules",
+    "dynamic-analysis",
+    "dependency-inventory",
+    "sample-coverage",
+    "reverse-engineering-hints",
+    "supply-chain-verification",
+    "logs",
+    "reports",
+  ];
 
   if (req.method !== "GET") {
     return res.status(405).json({ message: "僅支持GET請求" });

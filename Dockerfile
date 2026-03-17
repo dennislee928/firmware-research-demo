@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cron \
     gnupg \
     binwalk \
+    binutils \
     util-linux \
     bsdextrautils \
     yara \
@@ -55,7 +56,12 @@ RUN pip3 install --no-cache-dir \
 
 # Create directory structure
 RUN mkdir -p /firmware-analysis/binwalk-analysis \
+    /firmware-analysis/dependency-inventory \
+    /firmware-analysis/dynamic-analysis \
     /firmware-analysis/hexdump-analysis \
+    /firmware-analysis/sample-coverage \
+    /firmware-analysis/reverse-engineering-hints \
+    /firmware-analysis/supply-chain-verification \
     /firmware-analysis/yara-rules \
     /firmware-analysis/screenshots/ghidra \
     /firmware-analysis/firmware_samples \

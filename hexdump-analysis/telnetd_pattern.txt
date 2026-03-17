@@ -1,1 +1,1 @@
-/firmware-analysis/hexdump-analysis/ej8zgi6impkzdqco9yvmo4tla.zip_telnetd_pattern_20260317_030433.txt
+/firmware-analysis/hexdump-analysis/f7tvemxo674qm6t8dynqsu2ct.exe_telnetd_pattern_20260317_031509.txt

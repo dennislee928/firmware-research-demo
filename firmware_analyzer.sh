@@ -892,9 +892,10 @@ output_path = sys.argv[2]
 
 binary_exts = {".exe", ".dll", ".so", ".dylib", ".a", ".jar", ".bin", ".elf", ".out", ".apk", ".app", ".run"}
 script_exts = {".sh", ".py", ".pl", ".rb", ".js", ".bat", ".cmd", ".ps1", ".lua"}
+text_hint_exts = script_exts | {".json", ".xml", ".plist", ".txt", ".md", ".cfg", ".conf", ".ini", ".yaml", ".yml", ".toml", ".html", ".htm"}
 service_tokens = ("service", "launch", "startup", "start", "run", "daemon", "agent", "init", "entrypoint")
 update_tokens = ("update", "upgrade", "installer", "install", "flash", "recovery", "firmware", "driver")
-url_pattern = re.compile(r"https?://[^\\s\"'<>]+")
+url_pattern = re.compile(r"https?://(?:[A-Za-z0-9-]+\\.)+[A-Za-z]{2,}[^\\s\"'<>]*")
 
 
 def iter_files(root):
@@ -951,7 +952,7 @@ for rel_path, full_path in iter_files(scan_root):
             score += 1
         candidates.append((score, size, rel_path, ", ".join(sorted(set(reasons)))))
 
-    if len(url_hints) < 15:
+    if len(url_hints) < 15 and (reasons or ext in text_hint_exts):
         try:
             with open(full_path, "rb") as fh:
                 blob = fh.read(256 * 1024).decode("utf-8", "ignore")
@@ -1037,8 +1038,14 @@ scan_root = os.environ.get("SCAN_TARGET_ENV", "")
 signature_status = os.environ.get("SIGNATURE_STATUS_ENV", "not_applicable")
 signature_summary = os.environ.get("SIGNATURE_SUMMARY_ENV", "不適用")
 
-url_pattern = re.compile(r"https?://[^\\s\"'<>]+")
+url_pattern = re.compile(r"https?://(?:[A-Za-z0-9-]+\\.)+[A-Za-z]{2,}[^\\s\"'<>]*")
 cert_exts = {".pem", ".crt", ".cer", ".der", ".p7b", ".p12", ".pfx", ".key"}
+binary_exts = {".exe", ".dll", ".so", ".dylib", ".a", ".jar", ".bin", ".elf", ".out", ".apk", ".app", ".run"}
+text_hint_exts = {
+    ".json", ".xml", ".plist", ".txt", ".md", ".cfg", ".conf", ".ini",
+    ".yaml", ".yml", ".toml", ".html", ".htm", ".sh", ".py", ".js",
+    ".ps1", ".bat", ".cmd", ".rb", ".pl", ".lua"
+}
 manifest_names = {"package.json", "composer.json", "Cargo.toml", "go.mod", "Info.plist", "pyproject.toml"}
 update_tokens = ("update", "upgrade", "installer", "install", "flash", "recovery", "driver", "agent")
 
@@ -1155,18 +1162,19 @@ for rel_path, full_path in iter_files(scan_root):
         except Exception:
             pass
 
-    try:
-        with open(full_path, "rb") as fh:
-            blob = fh.read(256 * 1024).decode("utf-8", "ignore")
-    except OSError:
-        blob = ""
+    if base_name in manifest_names or ext in text_hint_exts or ext in binary_exts or any(token in lower_rel for token in update_tokens):
+        try:
+            with open(full_path, "rb") as fh:
+                blob = fh.read(256 * 1024).decode("utf-8", "ignore")
+        except OSError:
+            blob = ""
 
-    for match in url_pattern.findall(blob):
-        cleaned = match.rstrip(").,;\"'")
-        if cleaned and cleaned not in seen_urls:
-            seen_urls[cleaned] = rel_path
-        if len(seen_urls) >= 20:
-            break
+        for match in url_pattern.findall(blob):
+            cleaned = match.rstrip(").,;\"'")
+            if cleaned and cleaned not in seen_urls:
+                seen_urls[cleaned] = rel_path
+            if len(seen_urls) >= 20:
+                break
 
 
 for url, rel_path in seen_urls.items():

@@ -1,1 +1,1 @@
-/firmware-analysis/hexdump-analysis/ao67ekfv80tu5v4eyiyz1vzfp.dmg_security_patterns_20260317_022019.txt
+/firmware-analysis/hexdump-analysis/ej8zgi6impkzdqco9yvmo4tla.zip_security_patterns_20260317_030433.txt

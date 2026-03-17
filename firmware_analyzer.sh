@@ -340,15 +340,16 @@ run_yara_rules() {
     log "INFO" "正在掃描規則: $rule_name"
     : > "$result_file"
     
+    local yara_ret=0
     if [ -d "$SCAN_TARGET" ] && [ -f "$FIRMWARE_FILE" ] && [ "$FIRMWARE_FILE" != "$SCAN_TARGET" ]; then
       # 已解壓：同時掃描原始檔與解壓目錄，讓 PE 型規則有機會命中主程式
-      if ! yara -r "$rule_file" "$FIRMWARE_FILE" "$SCAN_TARGET" > "$result_file" 2>/dev/null; then
-        log "WARNING" "規則 $rule_name 執行失敗"
-      fi
+      yara -r "$rule_file" "$FIRMWARE_FILE" "$SCAN_TARGET" > "$result_file" 2>/dev/null || yara_ret=$?
     else
-      if ! yara -r "$rule_file" "$SCAN_TARGET" > "$result_file" 2>/dev/null; then
-        log "WARNING" "規則 $rule_name 執行失敗"
-      fi
+      yara -r "$rule_file" "$SCAN_TARGET" > "$result_file" 2>/dev/null || yara_ret=$?
+    fi
+    # YARA: 0=無命中, 1=有命中, 2=規則錯誤；僅在錯誤時記錄失敗，避免把「有命中」誤報為失敗
+    if [ "$yara_ret" -eq 2 ] || [ "$yara_ret" -gt 2 ]; then
+      log "WARNING" "規則 $rule_name 執行失敗 (exit $yara_ret)"
     fi
   done
   

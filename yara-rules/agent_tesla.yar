@@ -1,34 +1,28 @@
-rule AgentTesla_dotnet_detection {
+rule AgentTesla_Combined {
     meta:
-        description = "Detects Agent Tesla based on .NET artifacts and common strings"
+        description = "Combined detection for Agent Tesla variants"
         author = "Dennis Lee"
-        hash = "535ada9c0c833577ab9489386fad8fc02e9629fe8d038e3dedb3db261868e0ed"
 
     strings:
-        $s1 = "GetSavedPasswords" ascii wide
-        $s2 = "get_URL" ascii wide
-        $s3 = "get_UserName" ascii wide
-        $s4 = "get_Password" ascii wide
-        $s5 = "Microsoft.VisualBasic.MyServices" ascii wide
-        $s6 = "GuidAttribute" ascii wide
-        $s7 = "ComVisibleAttribute" ascii wide
-        $s8 = "get_Keyboard" ascii wide
-        $s9 = "get_Clipboard" ascii wide
+        // Stormshield strings
+        $h1 = "<br>UserName&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: " wide ascii
+        $h2 = "<br>PC&nbsp;Name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: " wide ascii
+        
+        // InQuest strings
+        $s1 = "get_kbok" ascii
+        $s2 = "get_CH" ascii
+        $s3 = "set_CH" ascii
+        $s4 = "get_clp" ascii
+        $s5 = "set_clp" ascii
+        
+        // Generic .NET / Stealer strings
+        $g1 = "get_URL" ascii wide
+        $g2 = "get_UserName" ascii wide
+        $g3 = "get_Password" ascii wide
+        $g4 = "GetSavedPasswords" ascii wide
+        $g5 = "mscoree.dll" ascii wide
+        $g6 = "Microsoft.VisualBasic" ascii wide
 
     condition:
-        uint16(0) == 0x5A4D and 3 of them
-}
-
-rule Generic_DotNet_Malware {
-    meta:
-        description = "Generic detection for suspicious .NET malware"
-    strings:
-        $msil = "BSJB" // .NET metadata header
-        $v1 = "get_MachineName" ascii wide
-        $v2 = "get_UserName" ascii wide
-        $v3 = "GetForegroundWindow" ascii wide
-        $v4 = "SetWindowsHookEx" ascii wide
-        $v5 = "GetAsyncKeyState" ascii wide
-    condition:
-        uint16(0) == 0x5A4D and $msil and 3 of ($v*)
+        uint16(0) == 0x5A4D and (any of ($h*) or 3 of ($s*) or 3 of ($g*))
 }

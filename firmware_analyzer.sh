@@ -1364,7 +1364,7 @@ EOF
   log "SUCCESS" "Ghidra分析筆記模板已更新"
 }
 
-# 根據規則名稱獲取分類
+# 根據規則名稱獲取分類（涵蓋 MalwareBazaar / VirusShare / theZoo 等樣本來源常見家族）
 get_yara_category() {
   local rule_name="$1"
   case "$rule_name" in
@@ -1377,8 +1377,17 @@ get_yara_category() {
     apt_waterbear|apt_plead_downloader|gen_tscookie_rat|apt_blackenergy|apt_fancybear_dnc|apt_blacktech|apt_volt_typhoon|agent_tesla)
       echo "高級持續性威脅工具 (APT Toolsets)"
       ;;
-    apt_vpnfilter|Linux_Trojan_Mirai)
+    apt_vpnfilter|Linux_Trojan_Mirai|MALW_Mirai|crime_mirai)
       echo "IoT 與路由器惡意軟體 (IoT & Router Malware)"
+      ;;
+    RANSOM_*|crime_ransom_*|crime_wannacry|Windows_Ransomware_*)
+      echo "勒索軟體 (Ransomware)"
+      ;;
+    MALW_Zeus|crime_zeus_panda|Windows_Trojan_Zeus|Windows_Trojan_RedLineStealer|Windows_Infostealer_*|Windows_Trojan_AgentTesla)
+      echo "資訊竊取與銀行木馬 (Info Stealer & Banking Trojan)"
+      ;;
+    MALW_Emotet|crime_emotet|Windows_Trojan_Emotet|mal_qbot_*|Windows_Trojan_Qbot)
+      echo "殭屍網路與載入程式 (Botnet & Loader)"
       ;;
     Windows_Trojan_Generic|Linux_Trojan_Generic|macOS_Trojan_Generic|Windows_Trojan_Trickbot|Windows_PUP_Generic)
       echo "通用惡意軟體與特洛伊木馬 (General Malware & Trojans)"

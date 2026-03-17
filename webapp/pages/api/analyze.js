@@ -13,10 +13,71 @@ export const config = {
 const ANALYSIS_DIR = "/firmware-analysis";
 const UPLOAD_DIR = path.join(ANALYSIS_DIR, "firmware_samples");
 const LOG_DIR = path.join(ANALYSIS_DIR, "logs");
+const DEFAULT_MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
+const parsedMaxUploadBytes = Number.parseInt(process.env.MAX_UPLOAD_BYTES || "", 10);
+const MAX_UPLOAD_BYTES = Number.isFinite(parsedMaxUploadBytes) && parsedMaxUploadBytes > 0
+  ? parsedMaxUploadBytes
+  : DEFAULT_MAX_UPLOAD_BYTES;
+const MAX_JOB_OUTPUT_CHARS = 20000;
+const MAX_STREAM_BUFFER_CHARS = 200000;
 
 // 確保目錄存在
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+
+const formatBytes = (bytes) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "未知";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const digits = value >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${value.toFixed(digits)}${units[unitIndex]}`;
+};
+
+const sanitizeStreamText = (chunk) =>
+  chunk
+    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, "")
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\r+/g, "\n")
+    .replace(/[^\x09\x0A\x20-\uFFFF]/g, "");
+
+const trimOutput = (text, limit = MAX_STREAM_BUFFER_CHARS) =>
+  text.length > limit ? text.slice(-limit) : text;
+
+const createStreamLogger = (jobId, label, sink, append) => {
+  let pending = "";
+
+  return {
+    handle(data) {
+      const sanitized = sanitizeStreamText(data.toString());
+      if (!sanitized) return;
+
+      append(sanitized);
+      pending += sanitized;
+
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (line.trim().length === 0) continue;
+        sink.write(`[Job ${jobId} ${label}] ${line}\n`);
+      }
+    },
+    flush() {
+      const line = pending.trim();
+      if (line) {
+        sink.write(`[Job ${jobId} ${label}] ${line}\n`);
+      }
+      pending = "";
+    },
+  };
+};
 
 // 讀取表單數據（包括檔案）
 const readFormData = async (req) => {
@@ -24,8 +85,8 @@ const readFormData = async (req) => {
     const form = new IncomingForm({
       uploadDir: UPLOAD_DIR,
       keepExtensions: true,
-      maxFileSize: 500 * 1024 * 1024, // 500MB limit per file
-      maxTotalFileSize: 500 * 1024 * 1024, // 500MB total limit
+      maxFileSize: MAX_UPLOAD_BYTES,
+      maxTotalFileSize: MAX_UPLOAD_BYTES,
     });
 
     form.parse(req, (err, fields, files) => {
@@ -88,7 +149,7 @@ export default async function handler(req, res) {
     if (getFieldValue(fields.yaraOnly) === "true") args.push("-y");
     if (getFieldValue(fields.binwalkOnly) === "true") args.push("-b");
     if (getFieldValue(fields.extractFilesystem) === "true") args.push("-x");
-    if (getFieldValue(fields.recursive) === "true") args.push("-r");
+    if (!files.firmware && getFieldValue(fields.recursive) === "true") args.push("-r");
     
     const scanDir = getFieldValue(fields.scanDirectory);
     if (scanDir) {
@@ -116,16 +177,19 @@ export default async function handler(req, res) {
     let stdout = "";
     let stderr = "";
 
-    child.stdout.on("data", (data) => { 
-      const chunk = data.toString();
-      stdout += chunk; 
-      process.stdout.write(`[Job ${jobId} STDOUT] ${chunk}`);
+    const stdoutLogger = createStreamLogger(jobId, "STDOUT", process.stdout, (chunk) => {
+      stdout = trimOutput(stdout + chunk);
     });
-    
-    child.stderr.on("data", (data) => { 
-      const chunk = data.toString();
-      stderr += chunk; 
-      process.stderr.write(`[Job ${jobId} STDERR] ${chunk}`);
+    const stderrLogger = createStreamLogger(jobId, "STDERR", process.stderr, (chunk) => {
+      stderr = trimOutput(stderr + chunk);
+    });
+
+    child.stdout.on("data", (data) => {
+      stdoutLogger.handle(data);
+    });
+
+    child.stderr.on("data", (data) => {
+      stderrLogger.handle(data);
     });
 
     child.on("error", (err) => {
@@ -142,6 +206,8 @@ export default async function handler(req, res) {
     });
 
     child.on("close", (code) => {
+      stdoutLogger.flush();
+      stderrLogger.flush();
       console.log(`[Job ${jobId}] Process exited with code ${code}`);
       const status = code === 0 ? "completed" : "failed";
       const finishedJobData = {
@@ -149,8 +215,8 @@ export default async function handler(req, res) {
         status,
         finishTime: new Date().toISOString(),
         exitCode: code,
-        stdout: stdout.slice(-20000), // Keep last 20KB
-        stderr: stderr.slice(-20000),
+        stdout: stdout.slice(-MAX_JOB_OUTPUT_CHARS),
+        stderr: stderr.slice(-MAX_JOB_OUTPUT_CHARS),
       };
       fs.writeFileSync(jobFile, JSON.stringify(finishedJobData, null, 2));
     });
@@ -161,6 +227,12 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error("分析錯誤:", error);
+    if (error?.httpCode === 413 || error?.code === 1009) {
+      return res.status(413).json({
+        message: `上傳檔案超過限制，目前上限為 ${formatBytes(MAX_UPLOAD_BYTES)}`,
+        error: error.message,
+      });
+    }
     res.status(500).json({ message: "分析過程中發生錯誤", error: error.message });
   }
 }

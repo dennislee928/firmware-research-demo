@@ -199,6 +199,9 @@ initialize_directories() {
   mkdir -p "$WORK_DIR/dependency-inventory"
   mkdir -p "$WORK_DIR/dynamic-analysis"
   mkdir -p "$WORK_DIR/hexdump-analysis"
+  mkdir -p "$WORK_DIR/sample-coverage"
+  mkdir -p "$WORK_DIR/reverse-engineering-hints"
+  mkdir -p "$WORK_DIR/supply-chain-verification"
   mkdir -p "$WORK_DIR/yara-rules"
   mkdir -p "$WORK_DIR/screenshots/ghidra"
   mkdir -p "$WORK_DIR/preprocessed"
@@ -476,7 +479,7 @@ EOF
           grep -Eo '([A-Za-z0-9._+-]+\.so(\.[0-9]+)*)|([A-Za-z0-9._+-]+\.dll)|([A-Za-z0-9._+-]+\.dylib)' | \
           sort -u | head -n 20 | while IFS= read -r ref; do
             [ -n "$ref" ] && echo "${candidate#$scan_root/} -> $ref" >> "$reference_tmp"
-          done
+          done || true
       done < <(find "$scan_root" -type f | head -n 40)
     else
       while IFS= read -r candidate; do
@@ -484,7 +487,7 @@ EOF
         grep -aEo '([A-Za-z0-9._+-]+\.so(\.[0-9]+)*)|([A-Za-z0-9._+-]+\.dll)|([A-Za-z0-9._+-]+\.dylib)' "$candidate" | \
           sort -u | head -n 20 | while IFS= read -r ref; do
             [ -n "$ref" ] && echo "${candidate#$scan_root/} -> $ref" >> "$reference_tmp"
-          done
+          done || true
       done < <(find "$scan_root" -type f | head -n 20)
     fi
   else
@@ -497,12 +500,12 @@ EOF
         grep -Eo '([A-Za-z0-9._+-]+\.so(\.[0-9]+)*)|([A-Za-z0-9._+-]+\.dll)|([A-Za-z0-9._+-]+\.dylib)' | \
         sort -u | head -n 20 | while IFS= read -r ref; do
           [ -n "$ref" ] && echo "$(basename "$scan_root") -> $ref" >> "$reference_tmp"
-        done
+        done || true
     else
       grep -aEo '([A-Za-z0-9._+-]+\.so(\.[0-9]+)*)|([A-Za-z0-9._+-]+\.dll)|([A-Za-z0-9._+-]+\.dylib)' "$scan_root" | \
         sort -u | head -n 20 | while IFS= read -r ref; do
           [ -n "$ref" ] && echo "$(basename "$scan_root") -> $ref" >> "$reference_tmp"
-        done
+        done || true
     fi
   fi
 
@@ -696,9 +699,618 @@ EOF
   log "SUCCESS" "動態分析預檢已生成: $dynamic_file"
 }
 
+generate_sample_coverage() {
+  log "INFO" "步驟7：建立樣本覆蓋摘要"
+
+  local coverage_dir="$WORK_DIR/sample-coverage"
+  local base_name=$(basename "$FIRMWARE_FILE")
+  local coverage_file="$coverage_dir/${base_name}_sample_coverage_$DATE_TAG.txt"
+  local scan_root="$SCAN_TARGET"
+
+  if check_command "python3"; then
+    python3 - "$scan_root" "$coverage_file" <<'EOF'
+from collections import Counter
+import os
+import sys
+
+scan_root = sys.argv[1]
+output_path = sys.argv[2]
+
+script_exts = {".sh", ".py", ".pl", ".rb", ".js", ".bat", ".cmd", ".ps1", ".lua"}
+archive_exts = {".zip", ".7z", ".tar", ".gz", ".xz", ".bz2", ".tgz", ".iso", ".dmg", ".pkg", ".msi"}
+config_exts = {
+    ".conf", ".cfg", ".ini", ".json", ".yaml", ".yml", ".xml", ".plist", ".toml",
+    ".service", ".env", ".properties", ".reg"
+}
+library_exts = {".so", ".dll", ".dylib", ".a", ".jar"}
+document_exts = {".txt", ".md", ".pdf", ".rtf", ".doc", ".docx", ".html", ".htm"}
+certificate_exts = {".pem", ".crt", ".cer", ".der", ".p7b", ".p12", ".pfx", ".key"}
+binary_exts = {".bin", ".elf", ".exe", ".out", ".apk", ".app", ".run"} | library_exts
+service_tokens = ("service", "launch", "startup", "start", "run", "daemon", "agent", "init", "entrypoint")
+update_tokens = ("update", "upgrade", "installer", "install", "flash", "recovery", "firmware", "driver")
+
+
+def iter_files(root):
+    if os.path.isdir(root):
+        for dirpath, _, filenames in os.walk(root):
+            for name in filenames:
+                path = os.path.join(dirpath, name)
+                yield os.path.relpath(path, root), path
+    elif os.path.exists(root):
+        yield os.path.basename(root), root
+
+
+def has_executable_hint(path, ext):
+    if ext in binary_exts:
+        return True
+    try:
+        return os.access(path, os.X_OK) and not os.path.isdir(path)
+    except OSError:
+        return False
+
+
+files = []
+for rel_path, full_path in iter_files(scan_root):
+    try:
+        size = os.path.getsize(full_path)
+    except OSError:
+        size = 0
+    files.append((rel_path, full_path, size))
+
+dir_count = 0
+if os.path.isdir(scan_root):
+    for _dirpath, dirnames, _filenames in os.walk(scan_root):
+        dir_count += len(dirnames)
+
+counts = Counter()
+ext_counter = Counter()
+largest = []
+interesting = []
+
+for rel_path, full_path, size in files:
+    lower_rel = rel_path.lower()
+    ext = os.path.splitext(lower_rel)[1] or "<noext>"
+    ext_counter[ext] += 1
+    largest.append((size, rel_path))
+
+    reasons = []
+    if has_executable_hint(full_path, ext):
+      counts["executables"] += 1
+      reasons.append("binary-or-executable")
+    if ext in script_exts:
+      counts["scripts"] += 1
+      reasons.append("script")
+    if ext in archive_exts:
+      counts["archives"] += 1
+      reasons.append("archive")
+    if ext in config_exts:
+      counts["configs"] += 1
+      reasons.append("config")
+    if ext in library_exts:
+      counts["libraries"] += 1
+      reasons.append("library")
+    if ext in document_exts:
+      counts["documents"] += 1
+    if ext in certificate_exts:
+      counts["certificates"] += 1
+      reasons.append("certificate")
+
+    if any(token in lower_rel for token in service_tokens):
+      reasons.append("startup-or-service")
+    if any(token in lower_rel for token in update_tokens):
+      reasons.append("updater-or-recovery")
+
+    if reasons:
+      score = len(set(reasons))
+      if size >= 1024 * 1024:
+        score += 1
+      interesting.append((score, size, rel_path, ", ".join(sorted(set(reasons)))))
+
+largest.sort(key=lambda item: (-item[0], item[1]))
+interesting.sort(key=lambda item: (-item[0], -item[1], item[2]))
+
+with open(output_path, "w", encoding="utf-8") as fh:
+    print(f"scan_root={scan_root}", file=fh)
+    print(f"mode={'directory' if os.path.isdir(scan_root) else 'file'}", file=fh)
+    print(f"total_files={len(files)}", file=fh)
+    print(f"total_directories={dir_count}", file=fh)
+    print(f"executables={counts['executables']}", file=fh)
+    print(f"scripts={counts['scripts']}", file=fh)
+    print(f"archives={counts['archives']}", file=fh)
+    print(f"configs={counts['configs']}", file=fh)
+    print(f"libraries={counts['libraries']}", file=fh)
+    print(f"documents={counts['documents']}", file=fh)
+    print(f"certificates={counts['certificates']}", file=fh)
+    print(f"interesting_candidates={min(len(interesting), 15)}", file=fh)
+
+    print("\n## Extension Breakdown", file=fh)
+    if ext_counter:
+        for ext, count in ext_counter.most_common(12):
+            print(f"EXT {ext} {count}", file=fh)
+    else:
+        print("EXT none 0", file=fh)
+
+    print("\n## Largest Files", file=fh)
+    if largest:
+        for size, rel_path in largest[:10]:
+            print(f"LARGEST {rel_path} | {size} bytes", file=fh)
+    else:
+        print("LARGEST none", file=fh)
+
+    print("\n## Interesting Candidates", file=fh)
+    if interesting:
+        for _score, size, rel_path, reason in interesting[:15]:
+            print(f"CANDIDATE {rel_path} | {reason} | {size} bytes", file=fh)
+    else:
+        print("CANDIDATE none", file=fh)
+EOF
+  else
+    cat > "$coverage_file" << EOF
+scan_root=$scan_root
+mode=unavailable
+total_files=0
+total_directories=0
+executables=0
+scripts=0
+archives=0
+configs=0
+libraries=0
+documents=0
+certificates=0
+interesting_candidates=0
+
+## Extension Breakdown
+EXT none 0
+
+## Largest Files
+LARGEST none
+
+## Interesting Candidates
+CANDIDATE none
+EOF
+  fi
+
+  log "SUCCESS" "樣本覆蓋摘要已生成: $coverage_file"
+}
+
+generate_reverse_engineering_hints() {
+  log "INFO" "步驟8：建立人工逆向輔助摘要"
+
+  local reverse_dir="$WORK_DIR/reverse-engineering-hints"
+  local base_name=$(basename "$FIRMWARE_FILE")
+  local reverse_file="$reverse_dir/${base_name}_reverse_hints_$DATE_TAG.txt"
+  local scan_root="$SCAN_TARGET"
+
+  if check_command "python3"; then
+    python3 - "$scan_root" "$reverse_file" <<'EOF'
+import os
+import re
+import sys
+
+scan_root = sys.argv[1]
+output_path = sys.argv[2]
+
+binary_exts = {".exe", ".dll", ".so", ".dylib", ".a", ".jar", ".bin", ".elf", ".out", ".apk", ".app", ".run"}
+script_exts = {".sh", ".py", ".pl", ".rb", ".js", ".bat", ".cmd", ".ps1", ".lua"}
+service_tokens = ("service", "launch", "startup", "start", "run", "daemon", "agent", "init", "entrypoint")
+update_tokens = ("update", "upgrade", "installer", "install", "flash", "recovery", "firmware", "driver")
+url_pattern = re.compile(r'https?://[A-Za-z0-9._~:/?#\\[\\]@!$&\'()*+,;=%-]+')
+
+
+def iter_files(root):
+    if os.path.isdir(root):
+        for dirpath, _, filenames in os.walk(root):
+            for name in filenames:
+                path = os.path.join(dirpath, name)
+                yield os.path.relpath(path, root), path
+    elif os.path.exists(root):
+        yield os.path.basename(root), root
+
+
+def is_executable(path, ext):
+    if ext in binary_exts:
+        return True
+    try:
+        return os.access(path, os.X_OK) and not os.path.isdir(path)
+    except OSError:
+        return False
+
+
+candidates = []
+service_count = 0
+binary_count = 0
+script_count = 0
+url_hints = []
+seen_urls = set()
+
+for rel_path, full_path in iter_files(scan_root):
+    lower_rel = rel_path.lower()
+    ext = os.path.splitext(lower_rel)[1]
+    size = 0
+    try:
+        size = os.path.getsize(full_path)
+    except OSError:
+        pass
+
+    reasons = []
+    if any(token in lower_rel for token in service_tokens):
+        reasons.append("startup-hook")
+        service_count += 1
+    if is_executable(full_path, ext):
+        reasons.append("binary-or-executable")
+        binary_count += 1
+    if ext in script_exts:
+        reasons.append("script")
+        script_count += 1
+    if any(token in lower_rel for token in update_tokens):
+        reasons.append("updater-recovery")
+
+    if reasons:
+        score = len(set(reasons))
+        if size >= 1024 * 1024:
+            score += 1
+        candidates.append((score, size, rel_path, ", ".join(sorted(set(reasons)))))
+
+    if len(url_hints) < 15:
+        try:
+            with open(full_path, "rb") as fh:
+                blob = fh.read(256 * 1024).decode("utf-8", "ignore")
+        except OSError:
+            blob = ""
+        for match in url_pattern.findall(blob):
+            cleaned = match.rstrip(").,;\"'")
+            if cleaned and cleaned not in seen_urls:
+                seen_urls.add(cleaned)
+                url_hints.append((rel_path, cleaned))
+            if len(url_hints) >= 15:
+                break
+
+candidates.sort(key=lambda item: (-item[0], -item[1], item[2]))
+
+with open(output_path, "w", encoding="utf-8") as fh:
+    print(f"scan_root={scan_root}", file=fh)
+    print(f"candidate_targets={min(len(candidates), 20)}", file=fh)
+    print(f"service_targets={service_count}", file=fh)
+    print(f"binary_targets={binary_count}", file=fh)
+    print(f"script_targets={script_count}", file=fh)
+    print(f"url_hints={len(url_hints)}", file=fh)
+
+    print("\n## Candidate Targets", file=fh)
+    if candidates:
+        for _score, size, rel_path, reason in candidates[:20]:
+            print(f"CANDIDATE {rel_path} | {reason} | {size} bytes", file=fh)
+    else:
+        print("CANDIDATE none", file=fh)
+
+    print("\n## URL Hints", file=fh)
+    if url_hints:
+        for rel_path, url in url_hints:
+            print(f"URL {rel_path} -> {url}", file=fh)
+    else:
+        print("URL none", file=fh)
+EOF
+  else
+    cat > "$reverse_file" << EOF
+scan_root=$scan_root
+candidate_targets=0
+service_targets=0
+binary_targets=0
+script_targets=0
+url_hints=0
+
+## Candidate Targets
+CANDIDATE none
+
+## URL Hints
+URL none
+EOF
+  fi
+
+  log "SUCCESS" "人工逆向輔助摘要已生成: $reverse_file"
+}
+
+verify_supply_chain_sources() {
+  log "INFO" "步驟9：建立供應鏈來源檢核摘要"
+
+  local supply_dir="$WORK_DIR/supply-chain-verification"
+  local base_name=$(basename "$FIRMWARE_FILE")
+  local supply_file="$supply_dir/${base_name}_supply_chain_$DATE_TAG.txt"
+  local scan_root="$SCAN_TARGET"
+
+  if check_command "python3"; then
+    SIGNATURE_STATUS_ENV="$SIGNATURE_STATUS" \
+    SIGNATURE_SUMMARY_ENV="$SIGNATURE_SUMMARY" \
+    FIRMWARE_FILE_ENV="$FIRMWARE_FILE" \
+    SCAN_TARGET_ENV="$scan_root" \
+    python3 - "$supply_file" <<'EOF'
+from collections import OrderedDict
+import hashlib
+import json
+import os
+import plistlib
+import re
+import sys
+
+output_path = sys.argv[1]
+firmware_file = os.environ.get("FIRMWARE_FILE_ENV", "")
+scan_root = os.environ.get("SCAN_TARGET_ENV", "")
+signature_status = os.environ.get("SIGNATURE_STATUS_ENV", "not_applicable")
+signature_summary = os.environ.get("SIGNATURE_SUMMARY_ENV", "不適用")
+
+url_pattern = re.compile(r'https?://[A-Za-z0-9._~:/?#\\[\\]@!$&\'()*+,;=%-]+')
+cert_exts = {".pem", ".crt", ".cer", ".der", ".p7b", ".p12", ".pfx", ".key"}
+manifest_names = {"package.json", "composer.json", "Cargo.toml", "go.mod", "Info.plist", "pyproject.toml"}
+update_tokens = ("update", "upgrade", "installer", "install", "flash", "recovery", "driver", "agent")
+
+
+def sha256_file(path):
+    if not path or not os.path.isfile(path):
+        return "unavailable"
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def iter_files(root):
+    if os.path.isdir(root):
+        for dirpath, _, filenames in os.walk(root):
+            for name in filenames:
+                path = os.path.join(dirpath, name)
+                yield os.path.relpath(path, root), path
+    elif os.path.isfile(root):
+        yield os.path.basename(root), root
+
+
+def add_manifest_hint(rel_path, hint, manifests):
+    if hint:
+        manifests.append(f"{rel_path} | {hint}")
+
+
+publisher_hints = []
+manifest_hints = []
+registry_hints = []
+url_refs = []
+domain_refs = []
+cert_files = []
+update_hints = []
+seen_urls = OrderedDict()
+seen_domains = OrderedDict()
+
+
+for rel_path, full_path in iter_files(scan_root):
+    lower_rel = rel_path.lower()
+    ext = os.path.splitext(lower_rel)[1]
+    base_name = os.path.basename(full_path)
+
+    if ext in cert_exts:
+        cert_files.append(rel_path)
+
+    if any(token in lower_rel for token in update_tokens):
+        update_hints.append(rel_path)
+
+    if base_name in manifest_names:
+        try:
+            if base_name == "package.json":
+                with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
+                    data = json.load(fh)
+                name = data.get("name")
+                version = data.get("version")
+                repository = data.get("repository")
+                homepage = data.get("homepage")
+                registry_hints.append("npm")
+                fields = []
+                if name:
+                    fields.append(f"name={name}")
+                if version:
+                    fields.append(f"version={version}")
+                if isinstance(repository, str):
+                    fields.append(f"repository={repository}")
+                elif isinstance(repository, dict) and repository.get("url"):
+                    fields.append(f"repository={repository['url']}")
+                if homepage:
+                    fields.append(f"homepage={homepage}")
+                add_manifest_hint(rel_path, " | ".join(fields), manifest_hints)
+            elif base_name == "composer.json":
+                with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
+                    data = json.load(fh)
+                registry_hints.append("packagist")
+                fields = []
+                for key in ("name", "version", "homepage"):
+                    value = data.get(key)
+                    if value:
+                        fields.append(f"{key}={value}")
+                add_manifest_hint(rel_path, " | ".join(fields), manifest_hints)
+            elif base_name == "Cargo.toml":
+                registry_hints.append("crates.io")
+                fields = []
+                with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
+                    for line in fh:
+                        stripped = line.strip()
+                        if stripped.startswith(("name =", "version =", "repository =", "homepage =")):
+                            fields.append(stripped.replace('"', ""))
+                add_manifest_hint(rel_path, " | ".join(fields[:4]), manifest_hints)
+            elif base_name == "go.mod":
+                registry_hints.append("go-mod")
+                module_line = ""
+                with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
+                    for line in fh:
+                        if line.startswith("module "):
+                            module_line = line.strip()
+                            break
+                add_manifest_hint(rel_path, module_line, manifest_hints)
+            elif base_name == "pyproject.toml":
+                registry_hints.append("pypi")
+                add_manifest_hint(rel_path, "python build metadata present", manifest_hints)
+            elif base_name == "Info.plist":
+                with open(full_path, "rb") as fh:
+                    data = plistlib.load(fh)
+                fields = []
+                for key in ("CFBundleIdentifier", "CFBundleName", "CFBundleVersion", "SUFeedURL"):
+                    value = data.get(key)
+                    if value:
+                        fields.append(f"{key}={value}")
+                add_manifest_hint(rel_path, " | ".join(fields), manifest_hints)
+        except Exception:
+            pass
+
+    try:
+        with open(full_path, "rb") as fh:
+            blob = fh.read(256 * 1024).decode("utf-8", "ignore")
+    except OSError:
+        blob = ""
+
+    for match in url_pattern.findall(blob):
+        cleaned = match.rstrip(").,;\"'")
+        if cleaned and cleaned not in seen_urls:
+            seen_urls[cleaned] = rel_path
+        if len(seen_urls) >= 20:
+            break
+
+
+for url, rel_path in seen_urls.items():
+    url_refs.append(f"{rel_path} -> {url}")
+    try:
+        domain = re.sub(r'^https?://', "", url).split("/")[0]
+    except Exception:
+        domain = ""
+    if domain and domain not in seen_domains:
+        seen_domains[domain] = True
+
+for domain in seen_domains.keys():
+    domain_refs.append(domain)
+
+if firmware_file.lower().endswith((".exe", ".dll")):
+    try:
+        import pefile
+        pe = pefile.PE(firmware_file)
+        if hasattr(pe, "FileInfo"):
+            for entry in pe.FileInfo:
+                for table in getattr(entry, "StringTable", []):
+                    for key, value in table.entries.items():
+                        if key in {"CompanyName", "ProductName", "OriginalFilename", "FileDescription"}:
+                            publisher_hints.append(f"{key}={value}")
+    except Exception:
+        pass
+
+registry_hints = list(OrderedDict.fromkeys(registry_hints))
+publisher_hints = list(OrderedDict.fromkeys(publisher_hints))
+manifest_hints = manifest_hints[:15]
+url_refs = url_refs[:15]
+domain_refs = domain_refs[:15]
+cert_files = cert_files[:15]
+update_hints = list(OrderedDict.fromkeys(update_hints))[:15]
+
+with open(output_path, "w", encoding="utf-8") as fh:
+    print(f"source_file={firmware_file}", file=fh)
+    print(f"scan_target={scan_root}", file=fh)
+    print(f"source_sha256={sha256_file(firmware_file)}", file=fh)
+    print(f"scan_target_sha256={sha256_file(scan_root)}", file=fh)
+    print(f"signature_status={signature_status}", file=fh)
+    print(f"signature_summary={signature_summary}", file=fh)
+    print(f"certificate_files={len(cert_files)}", file=fh)
+    print(f"url_references={len(url_refs)}", file=fh)
+    print(f"domain_references={len(domain_refs)}", file=fh)
+    print(f"manifest_provenance_entries={len(manifest_hints)}", file=fh)
+    print(f"publisher_hints={len(publisher_hints)}", file=fh)
+    print(f"registry_hints={len(registry_hints)}", file=fh)
+    print(f"update_channel_hints={len(update_hints)}", file=fh)
+
+    print("\n## Publisher Hints", file=fh)
+    if publisher_hints:
+        for hint in publisher_hints[:10]:
+            print(f"PUBLISHER {hint}", file=fh)
+    else:
+        print("PUBLISHER none", file=fh)
+
+    print("\n## Registry Hints", file=fh)
+    if registry_hints:
+        for hint in registry_hints:
+            print(f"REGISTRY {hint}", file=fh)
+    else:
+        print("REGISTRY none", file=fh)
+
+    print("\n## URL References", file=fh)
+    if url_refs:
+        for item in url_refs:
+            print(f"URL {item}", file=fh)
+    else:
+        print("URL none", file=fh)
+
+    print("\n## Domain References", file=fh)
+    if domain_refs:
+        for item in domain_refs:
+            print(f"DOMAIN {item}", file=fh)
+    else:
+        print("DOMAIN none", file=fh)
+
+    print("\n## Certificate Files", file=fh)
+    if cert_files:
+        for item in cert_files:
+            print(f"CERT {item}", file=fh)
+    else:
+        print("CERT none", file=fh)
+
+    print("\n## Manifest Provenance", file=fh)
+    if manifest_hints:
+        for item in manifest_hints:
+            print(f"MANIFEST {item}", file=fh)
+    else:
+        print("MANIFEST none", file=fh)
+
+    print("\n## Update Channel Hints", file=fh)
+    if update_hints:
+        for item in update_hints:
+            print(f"UPDATE {item}", file=fh)
+    else:
+        print("UPDATE none", file=fh)
+EOF
+  else
+    cat > "$supply_file" << EOF
+source_file=$FIRMWARE_FILE
+scan_target=$scan_root
+source_sha256=unavailable
+scan_target_sha256=unavailable
+signature_status=$SIGNATURE_STATUS
+signature_summary=$SIGNATURE_SUMMARY
+certificate_files=0
+url_references=0
+domain_references=0
+manifest_provenance_entries=0
+publisher_hints=0
+registry_hints=0
+update_channel_hints=0
+
+## Publisher Hints
+PUBLISHER none
+
+## Registry Hints
+REGISTRY none
+
+## URL References
+URL none
+
+## Domain References
+DOMAIN none
+
+## Certificate Files
+CERT none
+
+## Manifest Provenance
+MANIFEST none
+
+## Update Channel Hints
+UPDATE none
+EOF
+  fi
+
+  log "SUCCESS" "供應鏈來源檢核摘要已生成: $supply_file"
+}
+
 # 創建CAN協議日誌
 create_can_log() {
-  log "INFO" "步驟7：創建或更新模擬的CAN協議日誌"
+  log "INFO" "附加資料：創建或更新模擬的CAN協議日誌"
   
   if [ ! -f "$WORK_DIR/can-log-demo.txt" ]; then
     cat > "$WORK_DIR/can-log-demo.txt" << 'EOF'
@@ -717,35 +1329,31 @@ EOF
 
 # 創建Ghidra分析筆記
 create_ghidra_notes() {
-  log "INFO" "步驟8：創建或更新Ghidra分析筆記"
+  log "INFO" "附加資料：更新 Ghidra 分析筆記模板"
   
-  if [ ! -f "$WORK_DIR/ghidra-notes.md" ]; then
-    cat > "$WORK_DIR/ghidra-notes.md" << 'EOF'
-# Ghidra 分析筆記
+  cat > "$WORK_DIR/ghidra-notes.md" << 'EOF'
+# Ghidra 分析筆記模板
 
-## 字串分析結果
-- 發現字串 "telnetd"，可能表示韌體包含Telnet服務
-- 發現字串 "dropbear"，可能是SSH服務的實現
-- 發現字串 "/etc/shadow"，與密碼存儲相關
-- 發現字串 "CAN bus interface initialized"，表示支援CAN協議
+此檔作為人工逆向的工作紀錄入口，避免再填入固定示範結論。
 
-## 功能分析
-- 根據字串交叉引用，發現可能的網路初始化函數
-- 找到與認證相關的程式碼區段
-- 識別初始化硬體介面的函數
+## 建議輸入
+- `reverse-engineering-hints/`：優先匯入列出的候選可執行檔、啟動項與更新程式
+- `sample-coverage/`：查看最大檔案與尚未展開的封裝內容
+- `supply-chain-verification/`：比對雜湊、簽章、來源 URL 與發行者資訊
 
-## 安全考量
-- telnetd服務通常是不安全的，應該禁用
-- 需要確認dropbear的版本，檢查是否有已知漏洞
-- 存取/etc/shadow的代碼需要仔細審查權限設定
+## 建議檢查項目
+- 入口點、初始化流程、服務註冊與更新機制
+- 網路請求、版本檢查、憑證處理與簽章驗證路徑
+- 韌體寫入、恢復模式、權限提升與持久化邏輯
 
-## 後續分析建議
-- 使用模擬器運行韌體，觀察啟動過程
-- 反編譯網路相關功能，確認有無後門
-- 檢查CAN匯流排實現的安全性
+## 記錄欄位
+- 分析檔案：
+- 入口函數/主要模組：
+- 關鍵字串/URL：
+- 可疑 API 或系統呼叫：
+- 後續驗證動作：
 EOF
-    log "SUCCESS" "Ghidra分析筆記已創建"
-  fi
+  log "SUCCESS" "Ghidra分析筆記模板已更新"
 }
 
 # 創建安全分析報告

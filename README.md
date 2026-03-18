@@ -8,6 +8,10 @@
 - 📑 針對嵌入式系統中元件識別的模擬報告
 - 🐳 Docker 容器化與自動化分析流程
 
+## demo
+- https://firmware-research-demo.onrender.com
+
+
 ## 直接使用：
 ```bash
 docker pull dennisleetw/firmware-analyzer

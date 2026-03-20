@@ -1,0 +1,7 @@
+MZ......................This program cannot be run in DOS mode.
+[PE HEADER]
+Characteristics: ASLR=False, DEP=False
+[STRINGS]
+C:\Windows\System32\cmd.exe
+admin_password_backdoor
+telnetd.exe

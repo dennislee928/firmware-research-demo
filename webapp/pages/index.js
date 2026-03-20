@@ -1,11 +1,21 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import Head from "next/head";
 
 export default function Home() {
+  const artifactFolders = [
+    { id: "hexdump-analysis", label: "Hexdump 分析" },
+    { id: "binwalk-analysis", label: "Binwalk 分析" },
+    { id: "yara-rules", label: "YARA 規則" },
+    { id: "dynamic-analysis", label: "動態分析" },
+    { id: "dependency-inventory", label: "依賴盤點" },
+    { id: "sample-coverage", label: "樣本覆蓋" },
+    { id: "reverse-engineering-hints", label: "逆向提示" },
+    { id: "supply-chain-verification", label: "供應鏈來源" },
+  ];
+
   const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
   const [error, setError] = useState("");
   const [analysisOptions, setAnalysisOptions] = useState({
     yaraOnly: false,
@@ -14,47 +24,40 @@ export default function Home() {
     recursive: false,
   });
   const [recentReports, setRecentReports] = useState([]);
+  const [artifacts, setArtifacts] = useState({});
+  const [activeJobId, setActiveJobId] = useState(null);
+  const [currentJobDetail, setCurrentJobDetail] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisStatus, setAnalysisStatus] = useState("");
   const [scanDirectory, setScanDirectory] = useState("");
   const [fileExtension, setFileExtension] = useState(".bin");
-  const [showTooltip, setShowTooltip] = useState({
-    yara: false,
-    binwalk: false,
-    extract: false,
-  });
+  const [selectedArtifact, setSelectedArtifact] = useState(null);
+  const [viewingContent, setViewingContent] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // 工具提示樣式
-  const tooltipStyle = {
-    position: "absolute",
-    left: "100%",
-    top: "0",
-    marginLeft: "10px",
-    width: "320px",
-    padding: "10px",
-    backgroundColor: "#f0f9ff",
-    borderRadius: "6px",
-    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
-    zIndex: 10,
-    fontSize: "0.875rem",
-    lineHeight: "1.4",
-    border: "1px solid #bae6fd",
-  };
+  const pollingRef = useRef(null);
 
-  // 取得最近的報告
   useEffect(() => {
     fetchRecentReports();
+    fetchArtifacts();
+    const interval = setInterval(fetchArtifacts, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchRecentReports = async () => {
     try {
-      console.log("嘗試獲取報告列表...");
       const response = await axios.get("/api/reports");
-      console.log("報告列表獲取結果:", response.data);
-      setRecentReports(response.data.reports);
+      setRecentReports(response.data.reports || []);
     } catch (err) {
-      console.error("獲取報告列表失敗:", err);
-      setError(`獲取報告列表失敗: ${err.message || "未知錯誤"}`);
+      console.error("Fetch reports failed:", err);
+    }
+  };
+
+  const fetchArtifacts = async () => {
+    try {
+      const response = await axios.get("/api/artifacts?action=list");
+      setArtifacts(response.data || {});
+    } catch (err) {
+      console.error("Fetch artifacts failed:", err);
     }
   };
 
@@ -67,19 +70,34 @@ export default function Home() {
 
   const handleOptionChange = (e) => {
     const { name, checked } = e.target;
-    setAnalysisOptions((prev) => ({
-      ...prev,
-      [name]: checked,
-    }));
+    setAnalysisOptions((prev) => ({ ...prev, [name]: checked }));
+  };
+
+  const startPolling = (jobId) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    setActiveJobId(jobId);
+    setIsAnalyzing(true);
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await axios.get(`/api/status/${jobId}`);
+        setCurrentJobDetail(res.data);
+        if (res.data.status === "completed" || res.data.status === "failed") {
+          clearInterval(pollingRef.current);
+          setIsAnalyzing(false);
+          fetchRecentReports();
+          fetchArtifacts();
+        }
+      } catch (err) {
+        console.error("Poll error:", err);
+      }
+    }, 2000);
   };
 
   const handleUpload = async (e) => {
     e.preventDefault();
-
     if (!file && !scanDirectory) {
-      setError(
-        "請選擇要上傳的韌體檔案或指定掃描目錄(僅限 .bin, .img, .fw, .pkg, .dmg 格式)"
-      );
+      setError("請選擇檔案或指定掃描目錄");
       return;
     }
 
@@ -87,324 +105,209 @@ export default function Home() {
     setError("");
 
     const formData = new FormData();
-    if (file) {
-      formData.append("firmware", file);
-    }
-
+    if (file) formData.append("firmware", file);
     formData.append("yaraOnly", analysisOptions.yaraOnly);
     formData.append("binwalkOnly", analysisOptions.binwalkOnly);
     formData.append("extractFilesystem", analysisOptions.extractFilesystem);
     formData.append("recursive", analysisOptions.recursive);
-
     if (scanDirectory) {
       formData.append("scanDirectory", scanDirectory);
       formData.append("fileExtension", fileExtension);
     }
 
     try {
-      const response = await axios.post("/api/analyze", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      setUploadSuccess(true);
-      setIsAnalyzing(true);
-
-      // 輪詢分析狀態
-      const intervalId = setInterval(async () => {
-        try {
-          const statusResponse = await axios.get(
-            `/api/status/${response.data.jobId}`
-          );
-          setAnalysisStatus(statusResponse.data.status);
-
-          if (
-            statusResponse.data.status === "completed" ||
-            statusResponse.data.status === "failed"
-          ) {
-            clearInterval(intervalId);
-            setIsAnalyzing(false);
-            fetchRecentReports();
-          }
-        } catch (err) {
-          console.error("獲取分析狀態失敗:", err);
-        }
-      }, 2000);
+      const res = await axios.post("/api/analyze", formData);
+      startPolling(res.data.jobId);
     } catch (err) {
-      setError(err.response?.data?.message || "上傳失敗，請重試");
+      setError(err.response?.data?.message || "啟動分析失敗");
     } finally {
       setIsUploading(false);
     }
   };
 
+  const readArtifact = async (folder, filename) => {
+    try {
+      const res = await axios.get(`/api/artifacts?action=read&folder=${folder}&filename=${filename}`);
+      setViewingContent(res.data);
+      setSelectedArtifact({ folder, filename });
+      setIsModalOpen(true);
+    } catch (err) {
+      alert("讀取失敗: " + (err.response?.data?.message || err.message));
+    }
+  };
+
   const setupCron = async () => {
     try {
-      setIsAnalyzing(true);
-      const response = await axios.post("/api/setup-cron");
-      setAnalysisStatus("已成功設置定時任務");
-      setTimeout(() => {
-        setIsAnalyzing(false);
-        setAnalysisStatus("");
-      }, 3000);
+      await axios.post("/api/setup-cron");
+      alert("定時任務設置成功 (30分鐘一次)");
     } catch (err) {
-      setError(err.response?.data?.message || "設置定時任務失敗");
-      setIsAnalyzing(false);
+      setError("設置定時任務失敗");
     }
   };
 
   return (
-    <div className="min-h-screen py-8">
+    <div className="min-h-screen bg-gray-50 py-8 font-sans">
       <Head>
-        <title>韌體分析工具</title>
-        <meta name="description" content="韌體解包與特徵檢測工具" />
-        <link rel="icon" href="/favicon.ico" />
+        <title>韌體分析儀 - 高級面板</title>
       </Head>
 
-      <main className="container mx-auto px-4">
-        <h1 className="text-3xl font-bold text-center mb-8">韌體分析工具</h1>
+      <main className="container mx-auto px-4 max-w-7xl">
+        <header className="mb-10 text-center">
+          <h1 className="text-4xl font-extrabold text-gray-900 mb-2">韌體分析儀</h1>
+          <p className="text-gray-600">自動化解包、漏洞掃描與靜態分析工具</p>
+        </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* 上傳表單 */}
-          <div className="card">
-            <h2 className="text-xl font-semibold mb-4">上傳韌體檔案</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column: Control Panel */}
+          <div className="lg:col-span-4 space-y-6">
+            <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                <span className="bg-blue-100 text-blue-600 p-2 rounded-lg mr-3">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                </span>
+                上傳與分析 （上傳檔案大小限制：2GB）
+              </h2>
 
-            {error && (
-              <div className="alert alert-error">
-                <p>{error}</p>
-              </div>
-            )}
+              {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm border border-red-100">{error}</div>}
 
-            {uploadSuccess && !isAnalyzing && (
-              <div className="alert alert-success">
-                <p>檔案上傳成功並完成分析！請查看報告。</p>
-              </div>
-            )}
-
-            {isAnalyzing && (
-              <div className="alert alert-info">
-                <p>正在分析中: {analysisStatus || "準備分析..."}</p>
-              </div>
-            )}
-
-            <form onSubmit={handleUpload}>
-              <div className="mb-4">
-                <label className="label">
-                  上傳韌體檔案(僅限 .bin, .img, .fw, .pkg, .dmg 格式)
-                </label>
-                <input
-                  type="file"
-                  onChange={handleFileChange}
-                  className="input"
-                  accept=".bin,.img,.fw,.pkg,.dmg"
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="label">或指定掃描目錄</label>
-                <input
-                  type="text"
-                  value={scanDirectory}
-                  onChange={(e) => setScanDirectory(e.target.value)}
-                  placeholder="/firmware-analysis/firmware_samples"
-                  className="input"
-                />
-              </div>
-
-              {scanDirectory && (
-                <div className="mb-4">
-                  <label className="label">檔案副檔名</label>
-                  <input
-                    type="text"
-                    value={fileExtension}
-                    onChange={(e) => setFileExtension(e.target.value)}
-                    placeholder=".bin"
-                    className="input"
-                  />
+              <form onSubmit={handleUpload} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">韌體檔案 (.bin, .img, .fw, .pkg, .dmg, .iso, .zip, .7z, .tar, .gz, .exe, .msi)</label>
+                  <input type="file" onChange={handleFileChange} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
+                  <p className="mt-1 text-[11px] text-gray-400">單檔上傳上限由後端配置控制，預設為 2GB。</p>
                 </div>
-              )}
 
-              <div className="mb-6">
-                <h3 className="text-lg font-medium mb-2">分析選項</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="yaraOnly"
-                      name="yaraOnly"
-                      checked={analysisOptions.yaraOnly}
-                      onChange={handleOptionChange}
-                      className="mr-2"
-                    />
-                    <label
-                      htmlFor="yaraOnly"
-                      className="flex items-center"
-                      onMouseEnter={() =>
-                        setShowTooltip({ ...showTooltip, yara: true })
-                      }
-                      onMouseLeave={() =>
-                        setShowTooltip({ ...showTooltip, yara: false })
-                      }
-                    >
-                      僅執行 YARA 規則檢測
-                      <svg
-                        className="w-4 h-4 ml-1 text-blue-500"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                          clipRule="evenodd"
-                        ></path>
-                      </svg>
-                    </label>
-                  </div>
-
-                  {showTooltip.yara && (
-                    <div style={tooltipStyle}>
-                      <p className="font-semibold mb-1">
-                        YARA是一個用於識別和分類惡意軟體的工具
-                      </p>
-                      <ul className="list-disc pl-5 mb-2">
-                        <li>快速檢測韌體中的安全威脅或特定元件</li>
-                        <li>適用於有明確檢測目標的場景（如telnetd服務）</li>
-                        <li>最適合快速分析大量韌體</li>
-                      </ul>
-                      <p className="text-xs text-gray-600">
-                        使用firmware_analyzer.sh的-y參數
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="binwalkOnly"
-                      name="binwalkOnly"
-                      checked={analysisOptions.binwalkOnly}
-                      onChange={handleOptionChange}
-                      className="mr-2"
-                    />
-                    <label htmlFor="binwalkOnly">僅執行 binwalk 分析</label>
-                  </div>
-
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="extractFilesystem"
-                      name="extractFilesystem"
-                      checked={analysisOptions.extractFilesystem}
-                      onChange={handleOptionChange}
-                      className="mr-2"
-                    />
-                    <label htmlFor="extractFilesystem">提取檔案系統</label>
-                  </div>
-
-                  {scanDirectory && (
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="recursive"
-                        name="recursive"
-                        checked={analysisOptions.recursive}
-                        onChange={handleOptionChange}
-                        className="mr-2"
-                      />
-                      <label htmlFor="recursive">遞迴掃描子目錄</label>
-                    </div>
-                  )}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">或 指定容器內路徑</label>
+                  <input type="text" value={scanDirectory} onChange={(e) => setScanDirectory(e.target.value)} placeholder="/firmware-analysis/firmware_samples" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
-              </div>
 
-              <div className="mt-4 p-3 bg-blue-50 rounded-md text-sm text-blue-800 mb-4">
-                <p className="font-medium">分析選項組合建議：</p>
-                <ul className="list-disc pl-5 mt-1">
-                  <li>
-                    初次分析新韌體：使用完整分析（不選任何「僅執行」選項）
-                  </li>
-                  <li>快速安全檢查：選擇「僅執行YARA規則檢測」</li>
-                  <li>了解韌體結構：選擇「僅執行binwalk分析」</li>
-                  <li>
-                    深入檢查內部檔案：選擇「僅執行binwalk分析」+「提取檔案系統」
-                  </li>
-                </ul>
-              </div>
+                <div className="pt-2 border-t border-gray-100">
+                  <h3 className="text-sm font-bold text-gray-700 mb-3">進階選項</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(analysisOptions).map(([key, value]) => (
+                      <label key={key} className="flex items-center text-sm text-gray-600 cursor-pointer hover:text-gray-900">
+                        <input type="checkbox" name={key} checked={value} onChange={handleOptionChange} className="rounded text-blue-600 mr-2 focus:ring-blue-500" />
+                        {key === 'yaraOnly' ? '僅YARA' : key === 'binwalkOnly' ? '僅Binwalk' : key === 'extractFilesystem' ? '提取文件' : '遞迴掃描'}
+                      </label>
+                    ))}
+                  </div>
+                </div>
 
-              <div className="flex space-x-4">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={isUploading || isAnalyzing}
-                >
-                  {isUploading ? "上傳中..." : "上傳並分析"}
-                </button>
+                <div className="pt-4 flex flex-col space-y-2">
+                  <button type="submit" disabled={isUploading || isAnalyzing} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-bold py-2.5 rounded-lg transition duration-200 shadow-md">
+                    {isUploading ? "上傳中..." : isAnalyzing ? "分析中..." : "開始分析"}
+                  </button>
+                  <button type="button" onClick={setupCron} className="text-gray-500 text-xs hover:text-blue-600 underline">
+                    設置每30分鐘自動分析一次
+                  </button>
+                </div>
+              </form>
+            </section>
 
-                <button
-                  type="button"
-                  onClick={setupCron}
-                  className="btn btn-secondary"
-                  disabled={isAnalyzing}
-                >
-                  設置定時分析（30分鐘一次）
-                </button>
-              </div>
-            </form>
+            {/* Active Job Info */}
+            {currentJobDetail && (
+              <section className="bg-gray-900 rounded-xl shadow-lg p-5 text-white overflow-hidden">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-bold text-gray-300 uppercase text-xs tracking-wider">當前任務狀態</h3>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${currentJobDetail.status === 'completed' ? 'bg-green-500' : currentJobDetail.status === 'failed' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'}`}>
+                    {currentJobDetail.status}
+                  </span>
+                </div>
+                <div className="text-xs space-y-1.5 opacity-90">
+                  <p><span className="text-gray-500">ID:</span> {currentJobDetail.id}</p>
+                  <p className="truncate"><span className="text-gray-500">Command:</span> {currentJobDetail.command}</p>
+                </div>
+                {isAnalyzing && (
+                  <div className="mt-4 bg-black rounded p-3 text-[10px] font-mono text-green-400 h-32 overflow-y-auto">
+                    <pre>{currentJobDetail.stdout?.slice(-500) || "等待輸出..."}</pre>
+                  </div>
+                )}
+              </section>
+            )}
           </div>
 
-          {/* 報告列表 */}
-          <div className="card">
-            <h2 className="text-xl font-semibold mb-4">最近分析報告</h2>
-
-            {isAnalyzing ? (
-              <p className="text-blue-500">
-                正在分析中，報告將在分析完成後顯示...
-              </p>
-            ) : (
-              <>
-                {recentReports.length === 0 ? (
-                  <div>
-                    <p className="text-gray-500">尚無分析報告</p>
-                    <p className="text-sm text-orange-500 mt-2">
-                      如果您剛完成分析但未看到報告，請嘗試：
-                    </p>
-                    <ul className="list-disc pl-5 text-sm text-orange-500">
-                      <li>檢查分析命令是否執行成功</li>
-                      <li>點擊下方按鈕重新載入報告列表</li>
-                    </ul>
-                    <button
-                      onClick={fetchRecentReports}
-                      className="mt-2 px-3 py-1 bg-blue-100 text-blue-600 rounded-md text-sm"
-                    >
-                      重新載入報告列表
-                    </button>
-                  </div>
-                ) : (
-                  <ul className="space-y-2">
-                    {recentReports.map((report, index) => (
-                      <li key={index} className="border-b border-gray-200 pb-2">
-                        <a
-                          href={`/api/reports/${report.filename}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800"
-                        >
+          {/* Right Column: Artifacts & Results */}
+          <div className="lg:col-span-8 space-y-6">
+            {/* Reports Section */}
+            <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-4">分析報告 (.md)</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {recentReports.length > 0 ? (
+                  recentReports.map((report, idx) => (
+                    <div key={idx} className="group p-4 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-xl transition duration-200">
+                      <div className="flex justify-between items-start">
+                        <a href={`/api/reports/${report.filename}`} target="_blank" rel="noreferrer" className="text-sm font-bold text-gray-800 hover:text-blue-700 truncate block mr-2">
                           {report.filename}
                         </a>
-                        <p className="text-sm text-gray-600">{report.date}</p>
-                      </li>
-                    ))}
-                  </ul>
+                        <span className="text-[10px] text-gray-500 whitespace-nowrap">{new Date(report.date).toLocaleDateString()}</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Size: {(report.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-400 text-sm col-span-2 py-4 text-center">尚無報告，啟動分析以生成結果。</p>
                 )}
-              </>
-            )}
+              </div>
+            </section>
+
+            {/* Artifacts Explorer */}
+            <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-4">檔案檢索與結果庫</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8 gap-6">
+                {artifactFolders.map((folder) => (
+                  <div key={folder.id}>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">{folder.label}</h3>
+                    <ul className="space-y-1.5 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                      {artifacts[folder.id]?.length > 0 ? (
+                        artifacts[folder.id].map((art, idx) => (
+                          <li key={idx}>
+                            <button onClick={() => readArtifact(folder.id, art.name)} className="w-full text-left px-2 py-1.5 text-xs text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded transition truncate">
+                              📄 {art.name}
+                            </button>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-xs text-gray-300 italic">無相關檔案</li>
+                      )}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </section>
           </div>
         </div>
       </main>
 
-      <footer className="mt-12 text-center text-gray-500 text-sm">
-        <p>韌體分析工具 &copy; 2025 Dennis Lee</p>
-      </footer>
+      {/* Artifact Viewer Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-75 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-2xl">
+              <div>
+                <h3 className="font-bold text-gray-900">{selectedArtifact?.filename}</h3>
+                <p className="text-[10px] text-gray-500 uppercase tracking-widest">位置: {selectedArtifact?.folder}</p>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-200 rounded-full transition">
+                <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1 bg-gray-950 font-mono text-sm text-gray-300">
+              <pre className="whitespace-pre-wrap">{viewingContent || "讀取中..."}</pre>
+            </div>
+            <div className="p-4 border-t border-gray-200 text-right bg-gray-50 rounded-b-2xl">
+              <button onClick={() => setIsModalOpen(false)} className="px-6 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded-lg font-bold transition">關閉</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+      `}</style>
     </div>
   );
 }

@@ -1,0 +1,17 @@
+scan_root=/firmware-analysis/preprocessed/ej8zgi6impkzdqco9yvmo4tla.zip_20260317_020218_extracted
+manifest_files=0
+declared_dependencies=0
+bundled_libraries=0
+binary_library_references=0
+
+## Manifest Files
+MANIFEST none
+
+## Declared Dependencies
+DEPENDENCY none
+
+## Bundled Libraries
+LIBRARY none
+
+## Binary References
+BINARY_REF none

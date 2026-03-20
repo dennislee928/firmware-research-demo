@@ -5,13 +5,14 @@
 # 版本：1.1
 
 # 獲取當前目錄的絕對路徑
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+SCRIPT_DIR="/firmware-analysis"
 FIRMWARE_ANALYZER="$SCRIPT_DIR/firmware_analyzer.sh"
 LOG_DIR="$SCRIPT_DIR/logs"
 CRON_LOG="$LOG_DIR/cron_execution.log"
 
 # 確保日誌目錄存在
 mkdir -p "$LOG_DIR"
+touch "$CRON_LOG"
 
 # 確保腳本有執行權限
 chmod +x "$FIRMWARE_ANALYZER"

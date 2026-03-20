@@ -8,6 +8,10 @@
 - 📑 針對嵌入式系統中元件識別的模擬報告
 - 🐳 Docker 容器化與自動化分析流程
 
+## demo
+- https://firmware-research-demo.onrender.com
+
+
 ## 直接使用：
 ```bash
 docker pull dennisleetw/firmware-analyzer
@@ -21,6 +25,15 @@ container port set to 3000:3000
 open localhost:3000
 ```
 ![Screenshot 2025-04-14 at 1 11 00 PM](https://github.com/user-attachments/assets/5fb94635-ccb3-4a10-ba0b-89e404ef64bd)
+
+
+
+<img width="1320" height="891" alt="Screenshot 2026-03-16 at 11 34 27 PM" src="https://github.com/user-attachments/assets/373d3c04-2b05-464c-acea-ccc4aabc19a3" />
+
+
+<img width="894" height="613" alt="Screenshot 2026-03-16 at 11 33 00 PM" src="https://github.com/user-attachments/assets/52f699a6-a0b1-4526-9ca6-0d9de4be9b92" />
+
+
 
 ---
 ## Demo:
@@ -60,6 +73,10 @@ firmware-analysis-demo/
 | YARA    | 基於規則的特徵匹配    |
 | Docker  | 環境容器化與部署      |
 | Cron    | 自動化定期執行分析    |
+
+### 惡意程式樣本來源與 YARA 測試
+
+本專案 YARA 規則已針對 **MalwareBazaar、VX-Underground、MalShare、VirusShare、theZoo、Malware-Database** 等六大開源樣本來源常見家族進行擴充。若要了解各來源特點、依測試需求選擇來源，以及規則與來源對應，請見 [惡意程式樣本來源與 YARA 測試建議](docs/malware-sample-sources.md)。更新規則請執行：`./pull_yara_rules.sh`。
 
 ## 🔬 實作過程
 

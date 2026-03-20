@@ -28,8 +28,9 @@ export default function handler(req, res) {
     // 讀取報告內容
     const content = fs.readFileSync(reportPath, "utf8");
 
-    // 設置適當的內容類型
-    res.setHeader("Content-Type", "text/markdown");
+    // 明確指定 UTF-8，避免瀏覽器將中文誤判為其他編碼
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    res.setHeader("X-Content-Type-Options", "nosniff");
 
     // 返回報告內容
     res.status(200).send(content);

@@ -1,0 +1,14 @@
+scan_root=/firmware-analysis/preprocessed/ej8zgi6impkzdqco9yvmo4tla.zip_20260317_020218_extracted
+service_files=0
+script_candidates=0
+runtime_indicators=0
+safe_probes=0
+
+## Service And Launch Candidates
+SERVICE none
+
+## Runtime Indicators
+INDICATOR none
+
+## Safe Probes
+PROBE none

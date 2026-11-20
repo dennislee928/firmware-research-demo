@@ -37,6 +37,7 @@
     "browserslist": "^4.28.7",
     "glob": "^14.0.2",
     "picomatch": "^2.3.2",
-    "form-data": "^4.0.6"
+    "form-data": "^4.0.6",
+    "source-map-js": "^1.2.2"
   }
 }
